@@ -10,7 +10,12 @@ if [[ $1 == "--help" || $1 == "-h" ]]; then
   echo "    --ssh       collect ssh key information: .ssh"
   echo "    --git       collect git configuration: .gitconfig"
   echo "    --npm       collect nodejs settings: .npmrc, .tern-config"
-  echo "    --skip|-s   skip collect specific settings"
+  echo "    --skip      skip collect specific settings"
+  echo "    --progress  show collect progress bar"
+  echo "    --partial   record collect info, continue after interruption"
+  echo "    -P          abbreviation with --partial --progress"
+  echo "    --quiet|-q  ignore normal information except for error"
+  echo "    --port|-p   set ssh remote port, 22 by default"
   echo ""
   exit 0
 fi
@@ -28,16 +33,18 @@ _skip() {
   done
 }
 
-FLAGS="-avzch -q -P"
+FLAGS="-avzch"
 for p in $@; do
 case $p in 
   "--ssh") FILES="${FILES} .ssh" ;;
   "--git") FILES="${FILES} .gitconfig" ;;
   "--npm") FILES="${FILES} .npmrc .tern-config" ;;
   "--skip="*) _skip ${p#*--skip=} ;;
-  "-s="*) _skip ${p#*-s=} ;;
-  "--port="*) FLAGS="${FLAGS} -e \"ssh -p ${p#*--port=}\"" ;;
-  "-p="*) FLAGS="${FLAGS} -e \"ssh -p ${p#*-p=}\"" ;;
+  "--progress") FLAGS="${FLAGS} $p" ;;
+  "--partial") FLAGS="${FLAGS} $p" ;;
+  "-P") FLAGS="${FLAGS} $p" ;;
+  "--quiet"|"-q") FLAGS="${FLAGS} -q" ;;
+  "--port="*|"-p="*) FLAGS="${FLAGS} -e \"ssh -p ${p#*=}\"" ;;
   *) TARGET="$p"; shift ;;
 esac
 done
@@ -45,6 +52,7 @@ done
 TARGET=${TARGET:-./unix}
 echo "Collect current unix settings:"
 echo "    ${FILES}"
+echo "with command rsync options: ${FLAGS}"
 echo -n "into ${TARGET}, do you agree?[Y/N](default yes) "
 read AGREE
 if [[ "${AGREE}" != "Y" && "${AGREE}" != "y"&& "${AGREE}" != "" ]]; then
