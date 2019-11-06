@@ -1,6 +1,6 @@
 if [[ $1 == "--help" || $1 == "-h" ]]; then
   echo "Usage: collect settings in unix"
-  echo "  dotcfg.sh [USER@HOST:]path [options]"
+  echo "  collect.sh [USER@HOST:]path [options]"
   echo ""
   echo "  Settings include:"
   echo "    .profile, .bashrc, .bash_profile, .commacd.bash,"
