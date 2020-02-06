@@ -63,6 +63,7 @@ while true; do
   else
     echo -e "\033[31m[`date`] Status: disconnected \033[0m"
 
+    echo "SSH reconnecting..."
     eval ${COM_SSH}
     if [[ $? != 0 ]]; then
       echo "Encountered unknown error"
@@ -70,7 +71,7 @@ while true; do
     fi
 
     PID=`ps -ef | grep "${COM_SSH}" | head -n 1 | awk '{ print $2 }'`
-    echo "SSH Connected, PID: ${PID}"
+    echo "SSH PID: ${PID}"
 
     LOCAL_STATUS=0
   fi
