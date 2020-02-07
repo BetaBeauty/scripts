@@ -45,6 +45,7 @@ echo "PROXY: redirecting local port 22 into ${HOST}:${PORT}"
 echo
 echo "SSH command:" ${COM_SSH}
 
+# Check the existed connection with ssh
 COUNT=`ps -ef | grep "${COM_SSH}" | wc -l`
 LOCAL_STATUS=0
 if [[ ${COUNT} > 1 ]]; then
@@ -54,14 +55,21 @@ else
   LOCAL_STATUS=1
 fi
 
-
 while true; do
   eval ${COM_TEST}
   REMOTE_STATUS=$?
   if [[ ${REMOTE_STATUS} == 0 ]] && [[ ${LOCAL_STATUS} == 0 ]]; then
-    echo -e "\033[32m[`date`] Status: keep alive \033[0m"
+    echo -e "\033[32m[`date`] Status: connected \033[0m"
   else
     echo -e "\033[31m[`date`] Status: disconnected \033[0m"
+
+    # Kill all currently connection instance 
+    COUNT=`ps -ef | grep "${COM_SSH}" | wc -l`
+    if [[ ${COUNT} > 1 ]]; then
+      PID=`ps -ef | grep "${COM_SSH}" | head -n 1 | awk '{ print $2 }'`
+      echo "SSH disconnecting: ${PID}"
+      kill -9 ${PID}
+    fi
 
     echo "SSH reconnecting..."
     eval ${COM_SSH}
