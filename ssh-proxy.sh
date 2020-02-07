@@ -28,17 +28,30 @@ fi
 
 PORT=8827
 SLEEP_TIME=60
+
+SSH_FLAGS=""
 for p in $@; do
 case $p in 
   "--port="*|"-p="*) PORT=${p#*=} ;;
   "--sleep-time="*|"-s="*) SLEEP_TIME=${p#*=} ;;
+  "--local-to-remote="*|"-ltr="*) 
+    FLAGS=${p#*=}
+    SSH_FLAGS="${SSH_FLAGS} -R ${FLAGS}"
+  ;;
+  "--remote-to-local="*|"-rtl="*) 
+    FLAGS=${p#*=}
+    SSH_FLAGS="${SSH_FLAGS} -L ${FLAGS}"
+  ;;
   *) _help "unrecognized command: $p" ;;
 esac
 done
 
+if [[ ${SSH_FLAGS} == "" ]]; then
+  SSH_FLAGS="-R ${PORT}:localhost:22"
+fi
+SSH_FLAGS="${SSH_FLAGS} -o ServerAliveInterval=60"
 
-COM_SSH="ssh -NR ${PORT}:localhost:22 
-  -o ServerAliveInterval=60 ${USER}@${HOST} -f"
+COM_SSH="ssh -N ${SSH_FLAGS} ${USER}@${HOST} -f"
 COM_TEST="nc -z ${HOST} ${PORT}"
 
 echo "PROXY: redirecting local port 22 into ${HOST}:${PORT}"
