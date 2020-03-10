@@ -95,12 +95,14 @@ while true; do
       kill -9 ${PID}
     fi
 
-    echo "SSH reconnecting..."
+    echo -e "\033[32m[`date`] SSH reconnecting... \033[0m"
     eval ${COM_SSH}
-    if [[ $? != 0 ]]; then
+    while [[ $? != 0 ]]; do
       echo "Encountered unknown error"
-      exit
-    fi
+      sleep 60
+      echo -e "\033[32m[`date`] Retrying... \033[0m"
+      eval ${COM_SSH}
+    done
 
     PID=`ps -ef | grep -F "${COM_SSH}" | head -n 1 | awk '{ print $2 }'`
     echo "SSH PID: ${PID}"
