@@ -34,6 +34,7 @@ _skip() {
 }
 
 FLAGS="-avzch"
+BASE="local"
 for p in $@; do
 case $p in 
   "--ssh") FILES="${FILES} .ssh" ;;
@@ -45,30 +46,38 @@ case $p in
   "-P") FLAGS="${FLAGS} $p" ;;
   "--quiet"|"-q") FLAGS="${FLAGS} -q" ;;
   "--port="*|"-p="*) FLAGS="${FLAGS} -e \"ssh -p ${p#*=}\"" ;;
-  *) TARGET="$p"; shift ;;
+  "--remote") BASE="remote" ;;
+  "-"*) echo "commands parse with error: $p"; exit 0 ;;
+  *) REMOTE="$p"; shift ;;
 esac
 done
 
-TARGET=${TARGET:-./unix}
-echo "Collect current unix settings:"
+LOCAL="~"
+REMOTE="${REMOTE:-./unix}"
+echo "Collect ${BASE} unix settings:"
 echo "    ${FILES}"
-echo "with command rsync options: ${FLAGS}"
-echo -n "into ${TARGET}, do you agree?[Y/N](default yes) "
+echo "with Rsync Flag: ${FLAGS}, Local Path: \"${LOCAL}\", Remote Path: \"${REMOTE}\""
+echo -n ", do you agree?[Y/N](default N) "
 read AGREE
-if [[ "${AGREE}" != "Y" && "${AGREE}" != "y"&& "${AGREE}" != "" ]]; then
+if [[ "${AGREE}" != "Y" && "${AGREE}" != "y" && "${AGREE}" != "" ]]; then
   echo "Stopped collect unix settings with non user-agreement,"
   echo "    refer to help usage with -h for more details."
   exit 0
 fi
 
 _try_copy() {
-  _com="rsync ${FLAGS} $1 ${TARGET}/"
-  if [[ -e "$1" ]]; then
-    echo ${_com}
-    eval ${_com}
-  fi
+  _com="rsync ${FLAGS} $@"
+echo ${_com}
+eval ${_com}
 }
 
-for f in ${FILES}; do
-  _try_copy ~/$f
-done
+if [[ "${BASE}" == "local" ]]; then
+	for f in ${FILES}; do
+	  _try_copy "${LOCAL}/$f" "${REMOTE}"
+	done
+else
+	for f in ${FILES}; do
+	  echo "${TARGET} $f ${LOCAL}"
+	  _try_copy "${REMOTE}/$f" "${LOCAL}"
+	done
+fi
