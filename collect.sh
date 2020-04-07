@@ -21,7 +21,7 @@ if [[ $1 == "--help" || $1 == "-h" ]]; then
 fi
 
 FILES=".profile .bashrc .bash_profile .commacd.bash \
-.vimrc .vundle.vim .vim .tmux.conf aria2.conf"
+.vimrc .vundle.vim .vim .tmux.conf aria2.conf .condarc"
 
 _skip() {
   _old=${FILES}
