@@ -54,9 +54,10 @@ done
 
 LOCAL="~"
 REMOTE="${REMOTE:-./unix}"
-echo "Collect ${BASE} unix settings:"
+echo "Collect >>> ${BASE} <<< UNIX settings:"
 echo "    ${FILES}"
-echo "with Rsync Flag: ${FLAGS}, Local Path: \"${LOCAL}\", Remote Path: \"${REMOTE}\""
+echo "with rsync flag [ ${FLAGS} ] "
+echo "from \"${LOCAL}\" into \"${REMOTE}\""
 echo -n ", do you agree?[Y/N](default N) "
 read AGREE
 if [[ "${AGREE}" != "Y" && "${AGREE}" != "y" && "${AGREE}" != "" ]]; then
