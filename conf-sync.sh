@@ -269,6 +269,13 @@ config
   DESC="vim profile and conf"
 config
 
+  NAME="pip"
+  TYPE=integral
+  TARGET=FILES
+  VALUE=".config/pip"
+  DESC="pip profile"
+config
+
   NAME="tmux"
   TYPE=integral
   TARGET=FILES
