@@ -1,0 +1,28 @@
+# Config file for the n2n edge node daemon.
+
+# Sets the n2n community name. All edges within the same community appear on
+# the same LAN (layer 2 network segment). Community name is 16 bytes in length.
+N2N_COMMUNITY="Cortex_Labs_Foundation"
+
+# Sets the twofish encryption key from ASCII text. All edges communicating must
+# use the same key and community name.
+N2N_KEY="Guess_What_Password_For_Cortex"
+
+# Sets the n2n supernode IP address and port to register to.
+N2N_SUPERNODE="101.200.44.74:7654"
+#N2N_SUPERNODE="gandi.leggewie.org:1234"
+#N2N_SUPERNODE="remoteqth.com:82"
+
+# Sets the n2n virtual LAN IP address being claimed. This is a private IP
+# address. All IP addresses in an n2n community typical belong to the same /24
+# net‐ work (ie. only the last octet of the IP addresses varies).
+N2N_IP="10.2.5.2"
+
+N2N_DAEMON_OPTS=""
+
+# Uncomment this to get edge node started.
+N2N_EDGE_CONFIG_DONE="yes"
+
+#TODO
+# add routing option
+# sudo ip route add 192.168.1.0/24 via 10.1.2.1
