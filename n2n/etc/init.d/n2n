@@ -38,6 +38,14 @@ then
 	exit 0
 fi
 
+if [[ !-z "$N2N_IP" ]]; then
+  DAEMON_ARGS="-a N2N_IP"
+fi
+
+if [[ !-x "$N2N_DEV_NAME" ]]; then
+  DAEMON_ARGS="-d $N2N_DEV_NAME $DAEMON_ARGS"
+fi
+
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
 . /lib/lsb/init-functions
@@ -66,7 +74,7 @@ do_start()
 		|| return 1
 	export N2N_KEY
 	start-stop-daemon --start --quiet --user nobody --exec $DAEMON -- \
-		-f -a $N2N_IP -c $N2N_COMMUNITY -l $N2N_SUPERNODE \
+		-c $N2N_COMMUNITY -l $N2N_SUPERNODE \
 		-u $(id -u nobody) -g $(id -g nobody) $DAEMON_ARGS \
 		|| return 2
 }

@@ -16,6 +16,7 @@ N2N_SUPERNODE="101.200.44.74:7654"
 # Sets the n2n virtual LAN IP address being claimed. This is a private IP
 # address. All IP addresses in an n2n community typical belong to the same /24
 # net‐ work (ie. only the last octet of the IP addresses varies).
+# Set to be empty as choosing DHCP
 N2N_IP="10.2.5.2"
 
 N2N_DAEMON_OPTS=""
