@@ -38,8 +38,8 @@ then
 	exit 0
 fi
 
-if [[ !-z "$N2N_IP" ]]; then
-  DAEMON_ARGS="-a N2N_IP"
+if [ ! -z "$N2N_IP" ]; then
+  DAEMON_ARGS="-a $N2N_IP"
 fi
 
 # Load the VERBOSE setting and other rcS variables
