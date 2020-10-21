@@ -22,7 +22,7 @@ N2N_IP=""
 # Sets the edge node managing port, by default 5643,
 # using the command to lookup peers or set log level:
 #   nc -u localhost $N2N_MANA_PORT
-N2N_MANA_PORT="5643"
+N2N_MANA_PORT=""
 
 N2N_DAEMON_OPTS=""
 

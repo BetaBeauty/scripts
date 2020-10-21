@@ -25,7 +25,7 @@ do_stop() {
 
 do_mana() {
   echo "press Enter for static information query:"
-  netcat -u localhost 5643
+  netcat -u localhost 5644
 }
 
 case "$1" in
