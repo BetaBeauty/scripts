@@ -38,13 +38,8 @@ then
 	exit 0
 fi
 
-if [ ! -z "$N2N_IP" ]; then
-  DAEMON_ARGS="-a $N2N_IP"
-fi
-
-if [ ! -z "$N2N_MANA_PORT" ]; then
-  DAEMON_ARGS="-t $N2N_MANA_PORT $DAEMON_ARGS"
-fi
+[ -z "$N2N_IP" ] || DAEMON_ARGS="-a $N2N_IP $DAEMON_ARGS"
+[ -z "$N2N_MANA_PORT" ] || DAEMON_ARGS="-t $N2N_MANA_PORT $DAEMON_ARGS"
 
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh

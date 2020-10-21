@@ -8,7 +8,8 @@ DAEMON=$N2N_PATH/edge
 DAEMON_ARGS=""             # Arguments to run the daemon with
 
 if [ ! -x "$DAEMON" ]; then
-  echo "cannot find the binary: edge"
+  echo "can not find the binary: edge in path: $N2N_PATH, \
+    or you'd better to set customize n2n project compilation path."
   exit 1
 fi
 
@@ -19,13 +20,8 @@ if [ -z "$N2N_EDGE_CONFIG_DONE" ]; then
 	exit 0
 fi
 
-if [ ! -z "$N2N_IP" ]; then
-  DAEMON_ARGS="-a $N2N_IP"
-fi
-
-if [ ! -z "$N2N_MANA_PORT" ]; then
-  DAEMON_ARGS="-t $N2N_MANA_PORT $DAEMON_ARGS"
-fi
+[ -z "$N2N_IP" ] || DAEMON_ARGS="-a $N2N_IP $DAEMON_ARGS"
+[ -z "$N2N_MANA_PORT" ] || DAEMON_ARGS="-t $N2N_MANA_PORT $DAEMON_ARGS"
 
 export N2N_KEY
 $DAEMON -c $N2N_COMMUNITY -l $N2N_SUPERNODE -u $(id -u nobody) -g $(id -g nobody) \

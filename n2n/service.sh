@@ -23,11 +23,6 @@ do_stop() {
   sudo /etc/init.d/n2n stop
 }
 
-do_mana() {
-  echo "press Enter for static information query:"
-  netcat -u localhost 5644
-}
-
 case "$1" in
   install)
   do_install
@@ -44,16 +39,13 @@ case "$1" in
   status)
   do_lookup
   ;;
-  manage)
-  do_mana
-  ;;
   *)
   cat << EOF
-Usage: $SCRIPTNAME {install|deploy|start|stop|status|manage}
+Usage: $SCRIPTNAME {install|deploy|start|stop|status}
 
   install   copy configuration file into /etc and reload the system daemon
   deploy    install and start
-  start|stop|status|manage
+  start|stop|status
 EOF
 
   exit 3
