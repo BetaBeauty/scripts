@@ -42,6 +42,10 @@ if [ ! -z "$N2N_IP" ]; then
   DAEMON_ARGS="-a $N2N_IP"
 fi
 
+if [ ! -z "$N2N_MANA_PORT" ]; then
+  DAEMON_ARGS="-t $N2N_MANA_PORT $DAEMON_ARGS"
+fi
+
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
 . /lib/lsb/init-functions

@@ -19,6 +19,11 @@ N2N_SUPERNODE="101.200.44.74:7654"
 # Set to be empty as choosing DHCP
 N2N_IP=""
 
+# Sets the edge node managing port, by default 5643,
+# using the command to lookup peers or set log level:
+#   nc -u localhost $N2N_MANA_PORT
+N2N_MANA_PORT="5643"
+
 N2N_DAEMON_OPTS=""
 
 # Uncomment this to get edge node started.
