@@ -1,5 +1,28 @@
 # Config file for the n2n edge node daemon.
 
+# Uncomment this to get super/edge node started.
+# N2N_CONFIG_DONE="yes"
+
+# N2N binary path prefix
+N2N_PATH=/usr/sbin
+
+# Sets the super/edge node managing port, by default 5645/5644,
+# using the command to lookup peers or set log level:
+#   nc -u localhost $N2N_MANA_PORT
+N2N_MANA_PORT=""
+
+# Sets the verbosity level options, repeat as required.
+N2N_VERBOSITY="-v"
+
+
+# ======== Super Node Configuration ===========
+
+# Sets the n2n supernode's DHCP IP pools range, format is `net-net/bits`
+N2N_IP_POOLS="10.2.1.0-10.2.20.0/24"
+
+
+# ======== Edge Node Configuration ============
+
 # Sets the n2n community name. All edges within the same community appear on
 # the same LAN (layer 2 network segment). Community name is 16 bytes in length.
 N2N_COMMUNITY="Cortex_Labs_Foundation"
@@ -18,16 +41,6 @@ N2N_SUPERNODE="101.200.44.74:7654"
 # net‐ work (ie. only the last octet of the IP addresses varies).
 # Set to be empty as choosing DHCP
 N2N_IP=""
-
-# Sets the edge node managing port, by default 5643,
-# using the command to lookup peers or set log level:
-#   nc -u localhost $N2N_MANA_PORT
-N2N_MANA_PORT=""
-
-N2N_DAEMON_OPTS=""
-
-# Uncomment this to get edge node started.
-N2N_EDGE_CONFIG_DONE="yes"
 
 #TODO
 # add routing option

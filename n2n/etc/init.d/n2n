@@ -20,7 +20,16 @@ set -e
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC='n2n P2P VPN'
 NAME=n2n
-DAEMON=/usr/sbin/edge
+
+# Read configuration variable file if it is present
+if [ -r /etc/default/$NAME ]; then
+  . /etc/default/$NAME
+else
+  echo "can not find the correct n2n configuration file: /etc/default/$NAME"
+  exit 1
+fi
+
+DAEMON=$N2N_PATH/edge
 DAEMON_ARGS=""             # Arguments to run the daemon with
 #PIDFILE=/var/run/$NAME-edge.pid
 SCRIPTNAME=/etc/init.d/$NAME
@@ -28,11 +37,8 @@ SCRIPTNAME=/etc/init.d/$NAME
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
 
-# Read configuration variable file if it is present
-[ -r /etc/default/$NAME ] && . /etc/default/$NAME
-
 # Check config
-if [ -z "$N2N_EDGE_CONFIG_DONE" ]
+if [ -z "$N2N_CONFIG_DONE" ]
 then
 	echo "Warning: n2n VPN client is not configured, edit config file in /etc/default/$NAME." 1>&2
 	exit 0
