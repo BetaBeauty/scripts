@@ -23,9 +23,9 @@ fi
 [ -z "$N2N_IP" ] || DAEMON_ARGS="-a $N2N_IP $DAEMON_ARGS"
 [ -z "$N2N_MANA_PORT" ] || DAEMON_ARGS="-t $N2N_MANA_PORT $DAEMON_ARGS"
 DAEMON_ARGS="-c $N2N_COMMUNITY -l $N2N_SUPERNODE -u $(id -u nobody) \
-             -g $(id -u nobody) -f $N2N_VERBOSITY $DAEMON_ARGS"
+-g $(id -u nobody) -f $N2N_VERBOSITY $DAEMON_ARGS"
 
 export N2N_KEY
-EXEC_COM="$DAEMON $DAEMON_ARGS"
+EXEC_COM="$DAEMON $DAEMON_ARGS $*"
 echo "Exec: $EXEC_COM"
 $EXEC_COM || exit 2
