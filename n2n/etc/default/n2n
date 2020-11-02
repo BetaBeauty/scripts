@@ -1,7 +1,7 @@
 # Config file for the n2n edge node daemon.
 
 # Uncomment this to get super/edge node started.
-N2N_CONFIG_DONE="yes"
+# N2N_CONFIG_DONE="yes"
 
 # N2N binary path prefix
 N2N_PATH=/usr/sbin
