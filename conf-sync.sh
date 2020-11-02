@@ -99,7 +99,7 @@ append_opt_parser() {
     if [[ "${OPT}" != "" ]]; then
       OPT="${OPT}|"
     fi
-    if [[ ${TYPE}] == optional-kv ]]; then
+    if [[ ${TYPE} == optional-kv ]]; then
       OPT="${OPT}\"-${ALIAS_NAME}=\"*"
     else
       OPT="${OPT}\"-${ALIAS_NAME}\""
