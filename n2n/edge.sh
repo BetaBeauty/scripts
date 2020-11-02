@@ -28,4 +28,4 @@ DAEMON_ARGS="-c $N2N_COMMUNITY -l $N2N_SUPERNODE -u $(id -u nobody) \
 export N2N_KEY
 EXEC_COM="$DAEMON $DAEMON_ARGS $*"
 echo "Exec: $EXEC_COM"
-$EXEC_COM || exit 2
+sudo $EXEC_COM || exit 2
