@@ -298,7 +298,7 @@ config
 config
 
   NAME="git"
-  TYPE=optional
+  TYPE=integral
   TARGET=FILES
   VALUE=".gitconfig"
   DESC="git config collect"
