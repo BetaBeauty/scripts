@@ -1,7 +1,7 @@
 
 SCRIPTNAME=service.sh
 
-N2N_GIT_VERSION=84ec5c6
+N2N_GIT_VERSION=2.8
 
 do_install() {
   if [ ! -d ".tmp" ]; then
@@ -19,6 +19,7 @@ do_install() {
   if [ ! -f "/etc/init.d/n2n" ]; then
     sudo cp -r etc /
     sudo systemctl daemon-reload
+    sudo update-rc.d n2n defaults
   fi
 
   echo "Please edit the configuration file: /etc/default/n2n for your edge node"
