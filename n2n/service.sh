@@ -50,10 +50,6 @@ case "$1" in
   reload)
     force_reload
   ;;
-  deploy)
-    do_install
-    do_start
-  ;;
   start)
     do_start
   ;;
@@ -65,9 +61,8 @@ case "$1" in
   ;;
   *)
     cat << EOF
-Usage: $SCRIPTNAME {install|deploy|reload|start|stop|status}
+Usage: $SCRIPTNAME {install|reload|start|stop|status}
 
-  deploy    install and start
   install   copy configuration file into /etc and reload the system daemon
   reload    reload conf file for debug usage.
   start|stop|status
