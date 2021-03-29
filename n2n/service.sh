@@ -1,7 +1,7 @@
 
 SCRIPTNAME=service.sh
 
-N2N_GIT_VERSION=84ec5c6
+N2N_GIT_VERSION=2.8
 
 do_install() {
   if [ ! -d ".tmp" ]; then

@@ -37,6 +37,12 @@ _exec sudo apt upgrade
 _install_bin python-dev build-essential
 _install_bin make cmake vim git
 _install_bin rsync ssh
+_install_bin tmux
+
+# https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+# sudo add-apt-repository ppa:longsleep/golang-backports
+# sudo apt-get install software-properties-common
+
 
 DIR=ubuntu-server-installer
 _ubuntu_server_install() {
