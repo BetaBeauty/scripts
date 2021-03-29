@@ -5,39 +5,17 @@ from typing import Callable
 
 import argparse
 
-# sub command
-# group
-# option and arguments
-
 parser = argparse.ArgumentParser(
     description="bbcode helper script, implemented via python3")
 
-# sub_parser = parser.add_subparsers(
-#     title="COMMAND",
-#     description="collective sub commands, refer by code",
-#     prog="module")
-# common = sub_parser.add_parser("common", help="common parser")
-# n2n = sub_parser.add_parser("n2n", help="n2n project")
-# n2n = sub_parser.add_parser("c2c", help="n2n project")
-# n2n = sub_parser.add_parser("d2d")
-# n2n = sub_parser.add_parser("dksljiefjsekj", help="n2n project")
-# 
-# sub_parser = common.add_subparsers()
-# sub_parser.add_parser("base")
-# sub_parser.add_parser("project")
-# sub_parser.add_parser("log")
-
-
-# sub_parser = n2n.add_subparsers()
-# sub_parser.add_parser("code")
+__PARSER_KEY__ = "__PARSER__"
+__SUB_PARSER_KEY__ = "__SUB_PARSER__"
 
 """ Parser Root Object Dict
 
     orginized as like tree format, and each node maintains a default
     parser via key:`__PARSER__`.
 """
-__PARSER_KEY__ = "__PARSER__"
-__SUB_PARSER_KEY__ = "__SUB_PARSER__"
 __PARSERS__ = { __PARSER_KEY__: parser }
 
 def _register_sub_parser(parser_object : Dict, name, **kw):
@@ -80,13 +58,13 @@ class ParserFunc:
         else: # invoke module func
             return self._func_call(param)
 
-    def register_option(self, *args, **kw):
+    def option(self, *args, **kw):
         self._parser.add_argument(*args, **kw)
 
     def register_option_func(self, func):
         name = func.__name__.replace("_", "-")
         desc = func.__doc__
-        self.register_option(
+        self._parser.add_argument(
             "--" + name,
             action="store_true",
             help=desc)
@@ -99,31 +77,38 @@ class ParserFunc:
                 return func(args)
         return self._func(args)
 
-def register_option(*args, **kw) -> ParserFunc:
-    def _option(pfunc : ParserFunc):
-        pfunc.register_option(*args, **kw)
+def option(*args, **kw):
+    def _option(pfunc : ParserFunc) -> ParserFunc:
+        pfunc.option(*args, **kw)
         return pfunc
     return _option
 
-def register_module(parser_path : str = "", **kw) -> ParserFunc:
+def mod_parser(parser_path : str = "", **kw) -> ParserFunc:
     parser = _get_parser(parser_path, **kw)
     pfunc = ParserFunc(parser)
     return pfunc
 
+test_parser = mod_parser("test", help="enable test module")
 
-@register_module("test", help="enable test module")
+@test_parser
 def TestCore(args):
     print("Test Call")
 
-@register_option("--enable", action="store_true", help="enable opt1 flag")
-@TestCore.register_option_func
+@option("--enableA", action="store_true", help="enableA opt1 flag")
+@option("--enableB", action="store_true", help="enableB opt1 flag")
+@test_parser.register_option_func
 def test_opt1(args):
     """ test opt1 helper func
     """
-    if args.enable:
+    if args.enableB:
         print("enable flag opt1")
     else:
         print("disable flag opt1")
+
+tp1 = mod_parser("test")
+@tp1.register_option_func
+def test_opt2(args):
+    print("test opt2")
 
 if __name__ == "__main__":
     args = parser.parse_args()
