@@ -22,14 +22,12 @@ class ParserStorage:
     __STORES__ = {
         __PARSER_KEY__: parser,
         __GROUP_PARSER_KEY__: {},
-        __FUNC_KEY__: None,
     }
 
     @staticmethod
     def _init_parser_object(parser, is_group=False):
         parser_object = {
             ParserStorage.__PARSER_KEY__: parser,
-            ParserStorage.__FUNC_KEY__: None,
         }
         if not is_group:
             parser_object[ParserStorage.__GROUP_PARSER_KEY__] = {}
@@ -98,12 +96,13 @@ class ParserStorage:
 
     @staticmethod
     def register_func(parser_object, func):
+        if ParserStorage.__FUNC_KEY__ in parser_object:
+            raise RuntimeError(
+                "duplicated function set in parser storage, " +
+                "func-name: " + func.__name__ + " " +
+                "with storage: " + str(parser_object)
+            )
         parser_object[ParserStorage.__FUNC_KEY__] = func
-
-        # group_parsers = parser_object[ParserStorage.__GROUP_PARSER_KEY__]
-        # if group_name not in group_parsers:
-            # raise RuntimeError("cannot find group in parser")
-        # group_parsers[name][__FUNC_KEY__] = func
 
     @staticmethod
     def get_parser_from_object(parser_object):
@@ -120,7 +119,8 @@ class ParserStorage:
                 ParserStorage.__FUNC_KEY__ in group_parsers[group_name]:
             return group_parsers[group_name][ParserStorage.__FUNC_KEY__]
 
-        if not group_name and parser_object[ParserStorage.__FUNC_KEY__]:
+        if not group_name and \
+                ParserStorage.__FUNC_KEY__ in parser_object:
             return parser_object[ParserStorage.__FUNC_KEY__]
 
         def _null_func(*args, **kw):
@@ -135,27 +135,42 @@ class ParserFunc:
         self._parser_object = parser_object
         self._parser = ParserStorage.get_parser_from_object(parser_object)
 
-    def __call__(self, param) -> ParserFunc:
-        if callable(param): # register module func
-            ParserStorage.register_func(self._parser_object, param)
-            self._parser.set_defaults(func=self)
-            return self
-        else: # invoke module func
-            return self._call_func(args)
+        self._is_ref = False
+        self._func = None
 
-    def _call_func(self, args):
+    def by_reg(self, func):
+        self._parser.set_defaults(func=self)
+        ParserStorage.register_func(self._parser_object, func)
+        return self
+
+    def by_ref(self, func):
+        self._is_ref = True
+        self._func = func
+        return self
+
+    def __call__(self, *args, **kw):
+        if self._is_ref:
+            self._func(*args, **kw)
+        else:
+            self._mod_call(*args, **kw)
+
+    def _mod_call(self, args):
         names = ParserStorage.list_group_name(self._parser_object)
+
+        is_group_func = False
         for group_name in names:
             if getattr(args, group_name.replace("-", "_"), None):
                 func = ParserStorage.get_func(self._parser_object, group_name)
-                return func(args)
+                func(args)
+                is_group_func = True
 
-        return ParserStorage.get_func(self._parser_object)(args)
+        if not is_group_func:
+            ParserStorage.get_func(self._parser_object)(args)
 
     def register_option(self, *args, **kw):
         self._parser.add_argument(*args, **kw)
 
-    def register_group(self, func):
+    def by_group(self, func):
         name = func.__name__.replace("_", "-")
         desc = func.__doc__
         gp_object = ParserStorage.register_group(
@@ -169,7 +184,6 @@ class ParserFunc:
             action="store_true",
             help="enable module " + name)
 
-        ParserStorage.register_func(gp_object, func)
         return ParserFunc(gp_object)
 
 def register_option(*args, **kw):
@@ -178,15 +192,37 @@ def register_option(*args, **kw):
         return pfunc
     return _option
 
-def mod_parser(parser_path : str = "", **kw) -> ParserFunc:
+def mod_ref(parser_path : str = "", **kw) -> ParserFunc:
     parser = ParserStorage.get_parser_object(parser_path, parser_opts=[kw])
-    pfunc = ParserFunc(parser)
-    return pfunc
+    return ParserFunc(parser).by_ref
 
-def mod_group(parser_path : str, **kw) -> ParserFunc:
+def mod_main(parser_path : str = "", **kw):
     parser = ParserStorage.get_parser_object(parser_path, parser_opts=[kw])
-    pfunc = ParserFunc(parser)
-    return pfunc.register_group
+    return ParserFunc(parser).by_reg
+
+def group_ref(parser_path : str = "", **kw):
+    parser = ParserStorage.get_parser_object(parser_path, parser_opts=[kw])
+    def _ref(func):
+        return ParserFunc(parser).by_group(func).by_ref(func)
+    return _main
+
+def group_main(parser_path : str = "", **kw):
+    parser = ParserStorage.get_parser_object(parser_path, parser_opts=[kw])
+    def _main(func):
+        return ParserFunc(parser).by_group(func).by_reg(func)
+    return _main
+
+def Run():
+    args = parser.parse_args()
+
+    if getattr(args, "func", None):
+        args.func(args)
+        exit(0)
+
+    raise RuntimeError(
+        "cannot find the mainly function to run, " +
+        "please set main function via mod_main or group_main."
+    )
 
 # test_parser = mod_parser("test", help="enable test module")
 
@@ -206,9 +242,5 @@ def mod_group(parser_path : str, **kw) -> ParserFunc:
         # print("disable flag opt1")
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-
-    if getattr(args, "func", None):
-        args.func(args)
-        exit(0)
+    Run()
 
