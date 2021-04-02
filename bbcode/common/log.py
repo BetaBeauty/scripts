@@ -154,12 +154,12 @@ __LOG_NAME__ = ",".join([logging.getLevelName(l).strip() \
                      help="the verbosity for log level, " +
                         "show level upper set by user, "
                         "corresponding with " + __LOG_NAME__)
-@cmd.mod_ref("")
+@cmd.mod_ref("log")
 def Init(args):
     log_level = __LOG_VERBOSITY__[args.verbosity]
     logging.basicConfig(level=log_level)
     formatter = ColorFormatter(
-            fmt="[ %(asctime)s %(name)s.%(levelname)s ] %(message)s",
+            fmt="[ %(asctime)s %(name)s %(levelname)s ] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S")
 
     log_filter = FilterList(
@@ -172,10 +172,11 @@ def Init(args):
     logging.info("log module initiate with level: %s",
                  logging.getLevelName(log_level))
 
-@cmd.mod_main("log", help="log test main")
+@cmd.mod_main("log", help="log test module")
 def test_main(args):
     print(args)
 
+    print(cmd.ParserStorage.iterate())
     Init(args)
     logging.debug("test")
     logging.info("test")
