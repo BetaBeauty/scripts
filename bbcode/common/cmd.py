@@ -47,6 +47,67 @@ root_parser = argparse.ArgumentParser(
         multiple times if set in command line.
 """
 
+class LogName:
+    """ Formatted Logger Name
+
+        1. Dot splitted name, aka "cmd.test"
+        2. Array for module names, aka ["cmd", "test"]
+        3. Group related name, aka "cmd-test", always with prefix:"--"
+        4. Argument name parsed from command line, aka "cmd_test"
+    """
+
+    def __init__(self, log_name : str):
+        assert "-" not in log_name, log_name
+        assert "_" not in log_name, log_name
+        self.name = log_name
+
+    def __repr__(self):
+        return self.name
+
+    # hashable type, can be used at dict type
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other : LogName):
+        if isinstance(other, str):
+            other = LogName(other)
+        return other.name == self.name
+
+    @staticmethod
+    def from_mod_array(mod_arr : Sequence[str]) -> LogName:
+        return LogName(".".join(mod_arr))
+
+    @staticmethod
+    def from_cmd_name(cmd_name : str) -> LogName:
+        return LogName(cmd_name.replace("-", "."))
+
+    @staticmethod
+    def from_arg_name(arg_name : str) -> LogName:
+        return LogName(arg_name.replace("_", "."))
+
+    @property
+    def mod_array(self):
+        return [n for n in self.name.split(".") if n]
+
+    @property
+    def mod_prefix_arr(self):
+        prefix_arr = []
+        for i in range(len(self.mod_array)):
+            prefix_arr.append(".".join(self.mod_array[:i+1]))
+        return prefix_arr
+
+    @property
+    def mod_name(self):
+        return self.name.replace(".", "-")
+
+    @property
+    def cmd_name(self):
+        return "--" + self.name.replace(".", "-")
+
+    @property
+    def arg_name(self):
+        return self.name.replace(".", "_")
+
 class LogOption:
     def __init__(self):
         self.is_init = False
@@ -66,16 +127,44 @@ class EntryType(Enum):
     GLOBAL = 0
     MODULE = 1
 
+    # module as public entry function.
+    PUB_MOD = 0
+    # module as protected entry function,
+    #   but group options will pass through as public.
+    PRO_MOD = 1
+    # module as private entry function, options will be private as same.
+    PRI_MOD = 2
+    # public options reference.
+    PUB_REF = 3
+    # options to be private for current module.
+    PRI_REF = 4
+
+    @staticmethod
+    def is_mod(entry_type):
+        return entry_type in [PUB_MOD, PRO_MOD, PRI_MOD]
+
+    @staticmethod
+    def is_public(entry_type):
+        return entry_type 
+
 class LogFunction:
     def __init__(self, entry):
         self.entry : LogEntry = entry
         self.func = None
         self.is_main = False
 
+    def __repr__(self):
+        func_type = "MAIN" if self.is_main else "PASS"
+        return "%s (%s)" % (func_type, self.func)
+
     def __call__(self, *args, **kw):
-        if self.func is None:
+        if self.func is None and EntryType.is_mod(self.entry.entry_type):
             raise RuntimeError("cannot find the main function to run")
-        return self.func(*args, **kw)
+
+        if self.func is None:
+            print("null module function")
+        else:
+            return self.func(*args, **kw)
 
     def wrapper(self, func):
         self.func = func
@@ -85,27 +174,27 @@ class LogFunction:
         return self.func is None
 
 class LogEntry:
-    def __init__(self, name, entry_type = EntryType.GLOBAL):
-        self.name = name
+    def __init__(self, name : LogName, entry_type : EntryType):
+        self.name : LogName = name
         self.entry_type = entry_type
         self.options : Sequence[LogOption] = []
         self.params : LogOption = LogOption()
-        self.func = LogFunction(self)
-        self.groups : Dict[str, LogEntry] = {}
+        self.func : LogFunction = LogFunction(self)
+        self.groups : Dict[LogName, LogEntry] = {}
 
     def to_string(self, new_line=False, print_simple=True):
-        prefix = "\n\t" if new_line else ""
+        prefix = "\n\t" if new_line else " | "
 
-        ser = "%s " % self.name
-        ser += prefix + "params=%s " % self.params
-        ser += prefix + "options=%s " % self.options
+        ser = "Name=%s" % self.name
+        ser += prefix + "Params=%s" % self.params
+        ser += prefix + "Options=%s" % self.options
         if print_simple:
             group_ser = ", ".join(v.name for v in self.groups.values())
         else:
             group_ser = ",\n\t".join([v.to_string() \
                 for v in self.groups.values()])
-            group_ser = "\n" + group_ser + "\n"
-        ser += prefix + "groups=[%s] " % group_ser
+            group_ser = "\n\t" + group_ser + "\n"
+        ser += prefix + "Groups=[%s] " % group_ser
         return ser
 
     def add_group_entry(self, entry) -> LogEntry:
@@ -114,28 +203,29 @@ class LogEntry:
         self.groups[entry.name] = entry
         return self.groups[entry.name]
 
-    def as_group_opt(self, register_self=True):
-        entry = LogEntry(self.name)
+    def as_group_opt(self, is_group=False):
+        entry = LogEntry(self.name, entry_type=self.entry_type)
 
         entry.options = copy.deepcopy(self.options)
-
         entry.params = copy.deepcopy(self.params)
-        if register_self:
+        entry.func = self.func
+
+        if not is_group:
             enable_opt = LogOption().register(
-                ["--" + self.name],
+                [self.name.cmd_name],
                 { "action": "store_true",
-                  "help": "enable module " + self.name }
+                  "help": "enable module %s" % self.name.mod_name }
             )
             entry.options.insert(0, enable_opt)
 
             entry.params.args = list(entry.params.args)
-            entry.params.args.insert(0, self.name.replace(".", "-"))
-        #  entry.params.kw["description"] = entry.params.kw.pop("help", None)
+            entry.params.args.insert(0, self.name.mod_name)
         return entry
 
     def collect_group_opts(self):
-        groups = {k: v.as_group_opt(False) for k, v in self.groups.items() \
-            if v.entry_type == EntryType.GLOBAL}
+        groups = {k: v.as_group_opt(is_group=True) \
+            for k, v in self.groups.items() \
+                if v.entry_type == EntryType.GLOBAL}
         if self.entry_type == EntryType.GLOBAL:
             groups[self.name] = self.as_group_opt()
         return groups
@@ -153,11 +243,6 @@ class LogEntry:
         self.options.append(LogOption().register(args, kw))
         return self
 
-    def mod_names(self):
-        names = [n for n in self.name.split(".") if n]
-        return [(names[i], ".".join(names[:i+1])) \
-            for i in range(len(names))]
-
     def references(self):
         return self.params.kw.get("refs", [])
 
@@ -167,11 +252,14 @@ class LogEntry:
             del self.groups[self.name]
 
 class LogStorage:
-    STORE = {}
+    STORE : Dict[LogName, LogEntry] = {}
     PARSERS = {}
 
     @staticmethod
     def get_entry(mod_name, entry_type) -> LogEntry:
+        if isinstance(mod_name, str):
+            mod_name = LogName(mod_name)
+
         if mod_name not in LogStorage.STORE:
             LogStorage.STORE[mod_name] = LogEntry(
                 mod_name, entry_type=entry_type)
@@ -209,12 +297,12 @@ class LogStorage:
             if ref in ref_path:
                 _trigger_cycle_path(ref)
                 continue
-            ref_entry = LogStorage.STORE.get(ref, LogEntry(ref))
+            ref_entry = LogStorage.get_entry(ref, EntryType.GLOBAL)
             LogStorage.dfs_visit(ref_entry, ref_path)
 
         # remove refs and update current entry's groups
         for ref in entry.references():
-            ref_entry = LogStorage.STORE.get(ref, LogEntry(ref))
+            ref_entry = LogStorage.get_entry(ref, EntryType.GLOBAL)
             entry.groups.update(ref_entry.collect_group_opts())
 
         setattr(entry, "visited", True)
@@ -236,7 +324,7 @@ class LogStorage:
         def _func(args):
             is_exec = False
             for group in entry.groups.values():
-                if getattr(args, group.name.replace("-", "_"), None) and \
+                if getattr(args, group.name.arg_name, None) and \
                         group.func.is_main:
                     group.func(args)
                     is_exec = True
@@ -271,7 +359,7 @@ class LogStorage:
         for entry in LogStorage.STORE.values():
             LogStorage.dfs_visit(entry)
 
-        root_entry = LogEntry("")
+        root_entry = LogEntry("", entry_type=EntryType.GLOBAL)
         root_entry.register_parser(
             description="bbcode helper script, implemented via python3")
         root_entry = LogStorage.STORE.get("", root_entry)
@@ -286,10 +374,11 @@ class LogStorage:
 
         for entry in LogStorage.STORE.values():
             parser_object = LogStorage.PARSERS
-            for mod_name, prefix  in entry.mod_names():
+            for mod_name, prefix in zip(
+                    entry.name.mod_array, entry.name.mod_prefix_arr):
                 if mod_name not in parser_object:
                     mod_entry = LogStorage.STORE.get(
-                        prefix, LogEntry(prefix))
+                        prefix, LogEntry(prefix, EntryType.GLOBAL))
                     LogStorage.init_parser_object(
                         parser_object, mod_name, mod_entry)
                 parser_object = parser_object[mod_name]
@@ -298,7 +387,7 @@ class LogStorage:
     @staticmethod
     def get_parser(parser_path) -> argparse.ArgumentParser:
         parser_object = LogStorage.PARSERS
-        for mod_name, _ in LogEntry(parser_path).mod_names():
+        for mod_name in LogName(parser_path).mod_array:
             if mod_name not in parser_object:
                 raise RuntimeError("cannot find parser: " + parser_path)
             parser_object = parser_object[mod_name]
@@ -583,25 +672,17 @@ def mod_main(mod_name = "", *args, entry_type = EntryType.GLOBAL, **kw):
     mod_entry.func.is_main = True
     return mod_entry.func.wrapper
 
-def _group_func_wrapper(func, entry_type):
-    group_name = func.__name__.replace("_", "-")
-    desc = func.__doc__
-    group_entry = LogEntry(group_name, entry_type)
-    group_entry.register_parser(group_name, description=desc)
-
-    return group_entry.func.wrapper(func)
-
 def group_ref(mod_name = "", entry_type = EntryType.GLOBAL):
     mod_entry = LogStorage.get_entry(mod_name, entry_type)
     def _func(func):
-        group_name = func.__name__.replace("_", "-")
+        group_name = LogName.from_arg_name(func.__name__)
         desc = func.__doc__
         group_entry = LogEntry(group_name, entry_type)
 
         group_entry.func.wrapper(func)
         group_entry.func.is_main = True
 
-        group_entry.register_parser(group_name, description=desc)
+        group_entry.register_parser(group_name.mod_name, description=desc)
         group_entry.func.is_main = False
         mod_entry.add_group_entry(group_entry)
         return group_entry.func
@@ -610,18 +691,17 @@ def group_ref(mod_name = "", entry_type = EntryType.GLOBAL):
 def group_main(mod_name = "", entry_type = EntryType.GLOBAL):
     mod_entry = LogStorage.get_entry(mod_name, entry_type)
     def _func(func):
-        group_name = func.__name__.replace("_", "-")
+        group_name = LogName.from_arg_name(func.__name__)
         desc = func.__doc__
         group_entry = LogEntry(group_name, entry_type)
 
         group_entry.func.wrapper(func)
         group_entry.func.is_main = True
 
-        group_entry.register_parser(group_name, description=desc)
-        arg_name = "--" + group_name
-        group_entry.register_option(arg_name,
+        group_entry.register_parser(group_name.mod_name, description=desc)
+        group_entry.register_option(group_name.cmd_name,
                                     action="store_true",
-                                    help="enable module " + group_name)
+                                    help="enable module " + group_name.mod_name)
 
         mod_entry.add_group_entry(group_entry)
         return group_entry.func
@@ -650,7 +730,7 @@ def test_group_ref(args):
     print("group ref")
 
 @register_option("--group-opt1", action="store_true")
-@group_main("cmd.test", entry_type=EntryType.MODULE)
+@group_main("cmd.test", entry_type=EntryType.GLOBAL)
 def test_group_main(args):
     if args.group_opt1:
         print("group opt1")
