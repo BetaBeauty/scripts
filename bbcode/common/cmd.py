@@ -103,6 +103,10 @@ class CmdName:
     def arg_name(self):
         return self.name.replace(".", "_")
 
+    @staticmethod
+    def topo_sort(cmd_names : Sequence[CmdName]) -> Sequence[CmdName]:
+        return sorted(cmd_names, key=lambda x : len(x.name), reverse=True)
+
 class CmdOption:
     def __init__(self):
         self.is_init = False
@@ -229,7 +233,7 @@ class CmdStorage:
     PARSERS = {}
 
     @staticmethod
-    def get_entry(mod_name, entry_type) -> CmdEntry:
+    def get_entry(mod_name, entry_type = EntryType.PUBLIC) -> CmdEntry:
         if isinstance(mod_name, str):
             mod_name = CmdName(mod_name)
 
@@ -251,13 +255,13 @@ class CmdStorage:
 
             start = ref_path.index(ref_name)
             for ref in ref_path[start:-1]:
-                ref_entry = CmdStorage.STORE.get(ref, CmdEntry(ref))
+                ref_entry = CmdStorage.get_entry(ref, CmdEntry(ref))
                 # TODO: may cause undeterministic behavior, since
                 #   group names may be duplicated.
                 common_groups.update(ref_entry.collect_group_opts())
 
             for idx, ref in enumerate(ref_path[start:-1]):
-                ref_entry = CmdStorage.STORE.get(ref, CmdEntry(ref))
+                ref_entry = CmdStorage.get_entry(ref, CmdEntry(ref))
                 # remove dependency reference in ref_path
                 ref_entry.references().remove(ref_path[start+idx+1])
                 ref_entry.groups.update(common_groups)
@@ -270,12 +274,12 @@ class CmdStorage:
             if ref in ref_path:
                 _trigger_cycle_path(ref)
                 continue
-            ref_entry = CmdStorage.get_entry(ref, EntryType.PUBLIC)
+            ref_entry = CmdStorage.get_entry(ref)
             CmdStorage.dfs_visit(ref_entry, ref_path)
 
         # remove refs and update current entry's groups
         for ref in entry.references():
-            ref_entry = CmdStorage.get_entry(ref, EntryType.PUBLIC)
+            ref_entry = CmdStorage.get_entry(ref)
             entry.groups.update(ref_entry.collect_group_opts())
 
         setattr(entry, "visited", True)
@@ -329,13 +333,23 @@ class CmdStorage:
 
     @staticmethod
     def init_parsers() -> argparse.ArgumentParser:
-        for entry in CmdStorage.STORE.values():
+        for entry in list(CmdStorage.STORE.values()):
             CmdStorage.dfs_visit(entry)
+
+        # remove unuseful module path
+        for name in CmdName.topo_sort(CmdStorage.STORE.keys()):
+            entry = CmdStorage.STORE[name]
+            has_main_entry = not entry.func.empty()
+            for group in entry.groups.values():
+                if not group.func.empty():
+                    has_main_entry = True
+            if not has_main_entry:
+                del CmdStorage.STORE[name]
 
         root_entry = CmdEntry("", entry_type=EntryType.PUBLIC)
         root_entry.register_parser(
             description="bbcode helper script, implemented via python3")
-        root_entry = CmdStorage.STORE.get("", root_entry)
+        root_entry = CmdStorage.get_entry("", root_entry)
 
         root_entry.normalize()
         root_parser = argparse.ArgumentParser(
@@ -350,8 +364,7 @@ class CmdStorage:
             for mod_name, prefix in zip(
                     entry.name.mod_array, entry.name.mod_prefix_arr):
                 if mod_name not in parser_object:
-                    mod_entry = CmdStorage.STORE.get(
-                        prefix, CmdEntry(prefix, EntryType.PUBLIC))
+                    mod_entry = CmdStorage.get_entry(prefix)
                     CmdStorage.init_parser_object(
                         parser_object, mod_name, mod_entry)
                 parser_object = parser_object[mod_name]
@@ -433,7 +446,7 @@ def Run():
 """
 def register_test_func():
     @register_option("--group-opt2", action="store_true")
-    @group_ref("cmd.test")
+    @group_ref("log")
     def test_group_ref(args):
         """  test group reference doc
         """

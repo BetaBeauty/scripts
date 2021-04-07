@@ -124,9 +124,6 @@ def Init(args):
         handler.addFilter(log_filter)
         handler.setFormatter(formatter)
 
-    logging.info("log module initiate with level: %s",
-                 logging.getLevelName(log_level))
-
 if __name__ == "__main__":
     @cmd.mod_main("log", help="log test module", entry_type=cmd.EntryType.PRIVATE)
     def test_main(args):
