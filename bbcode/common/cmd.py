@@ -119,49 +119,26 @@ class CmdOption:
         return "@Opt(%s,%s)" % (self.args, self.kw)
 
 class EntryType(Enum):
-    GLOBAL = 0
-    MODULE = 1
-
-    # module as public entry function.
-    PUB_MOD = 0
-    # module as protected entry function,
-    #   but group options will pass through as public.
-    PRO_MOD = 1
-    # module as private entry function, options will be private as same.
-    PRI_MOD = 2
-    # public options reference.
-    PUB_REF = 3
-    # options to be private for current module.
-    PRI_REF = 4
-
-    @staticmethod
-    def is_mod(entry_type):
-        return entry_type in [PUB_MOD, PRO_MOD, PRI_MOD]
-
-    @staticmethod
-    def is_public(entry_type):
-        return entry_type 
+    PUBLIC = 0
+    PRIVATE = 1
 
 class CmdFunction:
     def __init__(self, entry):
         self.entry : CmdEntry = entry
         self.func = None
-        self.is_main = False
 
     def __repr__(self):
-        func_type = "MAIN" if self.is_main else "PASS"
+        func_type = "MAIN" if self.func else "PASS"
         return "%s (%s)" % (func_type, self.func)
 
     def __call__(self, *args, **kw):
-        if self.func is None and EntryType.is_mod(self.entry.entry_type):
-            raise RuntimeError("cannot find the main function to run")
-
         if self.func is None:
-            print("null module function")
-        else:
-            return self.func(*args, **kw)
+            raise RuntimeError("null module function")
+        return self.func(*args, **kw)
 
     def wrapper(self, func):
+        if self.func is not None:
+            raise RuntimeError("duplicated functions")
         self.func = func
         return self
 
@@ -220,8 +197,8 @@ class CmdEntry:
     def collect_group_opts(self):
         groups = {k: v.as_group_opt(is_group=True) \
             for k, v in self.groups.items() \
-                if v.entry_type == EntryType.GLOBAL}
-        if self.entry_type == EntryType.GLOBAL:
+                if v.entry_type == EntryType.PUBLIC}
+        if self.entry_type == EntryType.PUBLIC:
             groups[self.name] = self.as_group_opt()
         return groups
 
@@ -292,12 +269,12 @@ class CmdStorage:
             if ref in ref_path:
                 _trigger_cycle_path(ref)
                 continue
-            ref_entry = CmdStorage.get_entry(ref, EntryType.GLOBAL)
+            ref_entry = CmdStorage.get_entry(ref, EntryType.PUBLIC)
             CmdStorage.dfs_visit(ref_entry, ref_path)
 
         # remove refs and update current entry's groups
         for ref in entry.references():
-            ref_entry = CmdStorage.get_entry(ref, EntryType.GLOBAL)
+            ref_entry = CmdStorage.get_entry(ref, EntryType.PUBLIC)
             entry.groups.update(ref_entry.collect_group_opts())
 
         setattr(entry, "visited", True)
@@ -320,18 +297,18 @@ class CmdStorage:
             is_exec = False
             for group in entry.groups.values():
                 if getattr(args, group.name.arg_name, None) and \
-                        group.func.is_main:
+                        not group.func.empty():
                     group.func(args)
                     is_exec = True
 
-            if not is_exec and entry.func.is_main:
+            if not is_exec and not entry.func.empty():
                 is_exec = True
                 entry.func(args)
 
             if not is_exec:
                 raise RuntimeError(
-                    "can not find module " + entry.name + \
-                    " main function to run")
+                    "can not find module [" + entry.name + \
+                    "] main function to run")
         parser.set_defaults(func=_func)
 
     @staticmethod
@@ -354,7 +331,7 @@ class CmdStorage:
         for entry in CmdStorage.STORE.values():
             CmdStorage.dfs_visit(entry)
 
-        root_entry = CmdEntry("", entry_type=EntryType.GLOBAL)
+        root_entry = CmdEntry("", entry_type=EntryType.PUBLIC)
         root_entry.register_parser(
             description="bbcode helper script, implemented via python3")
         root_entry = CmdStorage.STORE.get("", root_entry)
@@ -373,7 +350,7 @@ class CmdStorage:
                     entry.name.mod_array, entry.name.mod_prefix_arr):
                 if mod_name not in parser_object:
                     mod_entry = CmdStorage.STORE.get(
-                        prefix, CmdEntry(prefix, EntryType.GLOBAL))
+                        prefix, CmdEntry(prefix, EntryType.PUBLIC))
                     CmdStorage.init_parser_object(
                         parser_object, mod_name, mod_entry)
                 parser_object = parser_object[mod_name]
@@ -398,49 +375,43 @@ def register_option(*args, **kw):
         return func
     return _func
 
-def mod_ref(mod_name = "", entry_type = EntryType.GLOBAL):
+def mod_ref(mod_name = "", entry_type = EntryType.PUBLIC):
     mod_entry = CmdStorage.get_entry(mod_name, entry_type)
-    mod_entry.func.is_main = False
-    return mod_entry.func.wrapper
+    func = CmdFunction(mod_entry)
+    return func.wrapper
 
-def mod_main(mod_name = "", *args, entry_type = EntryType.GLOBAL, **kw):
+def mod_main(mod_name = "", *args, entry_type = EntryType.PUBLIC, **kw):
     mod_entry = CmdStorage.get_entry(mod_name, entry_type)
     mod_entry.register_parser(*args, **kw)
-    mod_entry.func.is_main = True
     return mod_entry.func.wrapper
 
-def group_ref(mod_name = "", entry_type = EntryType.GLOBAL):
+def group_ref(mod_name = "", entry_type = EntryType.PUBLIC):
     mod_entry = CmdStorage.get_entry(mod_name, entry_type)
     def _func(func):
         group_name = CmdName.from_arg_name(func.__name__)
         desc = func.__doc__
         group_entry = CmdEntry(group_name, entry_type)
-
-        group_entry.func.wrapper(func)
-        group_entry.func.is_main = True
-
         group_entry.register_parser(group_name.mod_name, description=desc)
-        group_entry.func.is_main = False
         mod_entry.add_group_entry(group_entry)
-        return group_entry.func
+
+        gfunc = CmdFunction(group_entry)
+        gfunc.wrapper(func)
+        return gfunc
     return _func
 
-def group_main(mod_name = "", entry_type = EntryType.GLOBAL):
+def group_main(mod_name = "", entry_type = EntryType.PUBLIC):
     mod_entry = CmdStorage.get_entry(mod_name, entry_type)
     def _func(func):
         group_name = CmdName.from_arg_name(func.__name__)
         desc = func.__doc__
         group_entry = CmdEntry(group_name, entry_type)
-
-        group_entry.func.wrapper(func)
-        group_entry.func.is_main = True
-
         group_entry.register_parser(group_name.mod_name, description=desc)
         group_entry.register_option(group_name.cmd_name,
                                     action="store_true",
                                     help="enable module " + group_name.mod_name)
-
         mod_entry.add_group_entry(group_entry)
+
+        group_entry.func.wrapper(func)
         return group_entry.func
     return _func
 
@@ -470,7 +441,7 @@ def register_test_func():
         print("group ref")
 
     @register_option("--group-opt1", action="store_true")
-    @group_main("cmd.test", entry_type=EntryType.GLOBAL)
+    @group_main("cmd.test", entry_type=EntryType.PUBLIC)
     def test_group_main(args):
         if args.group_opt1:
             print("group opt1")
@@ -486,6 +457,9 @@ def register_test_func():
     @register_option("-v", "--verbosity", type=int, help="print information")
     @mod_main("cmd.test", description="bbcode cmd test module")
     def test_main(args):
+        test_opt1(args)
+        test_group_main(args)
+        test_group_ref(args)
         if args.verbosity:
             print("verbosity output")
         else:

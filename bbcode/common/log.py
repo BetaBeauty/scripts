@@ -4,51 +4,6 @@ from typing import List
 from . import cmd
 
 import logging
-import coloredlogs
-
-__PRIMITIVES__ : List[str] = []
-__HEADER_MAX_SIZE__ : int = 0
-
-def _print_impl(header, content):
-    print(header + "$ " + content)
-
-def _get_header(code : int):
-    header = "> "
-    header += datetime.now().strftime("%H:%M:%S")
-    header += " - "
-    header += "["
-    header += ("{:>" + str(__HEADER_MAX_SIZE__) + "}").format(
-            __PRIMITIVES__[code])
-    header += "] "
-    return header
-
-def register_primitive(primitive : str) -> int:
-    global __PRIMITIVES__, __HEADER_MAX_SIZE__
-
-    code = len(__PRIMITIVES__)
-    if len(primitive) > __HEADER_MAX_SIZE__:
-        __HEADER_MAX_SIZE__ = len(primitive)
-    __PRIMITIVES__.append(primitive)
-    return code
-
-COMMAND = register_primitive("COMMAND")
-HEADER = register_primitive("========== HEADER ==========")
-
-INFO = register_primitive("INFO")
-DEBUG = register_primitive("DEBUG")
-WARN = register_primitive("WARN")
-ERROR = register_primitive("ERROR")
-FATAL = register_primitive("FATAL")
-
-def Print(code, *args):
-    global __PRIMITIVES__
-
-    if code >= len(__PRIMITIVES__):
-        raise RuntimeError("out of bound primitive code: " + code)
-
-    header = _get_header(code)
-    content = " ".join(args)
-    _print_impl(header, content)
 
 class ColorFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None, style='%'):
@@ -136,8 +91,8 @@ FATAL = logging.CRITICAL
 
 logging.addLevelName(TRACE, "TRACE")
 logging.addLevelName(DEBUG, "DEBUG")
-logging.addLevelName(INFO, " INFO")
-logging.addLevelName(WARN, " WARN")
+logging.addLevelName(INFO,  " INFO")
+logging.addLevelName(WARN,  " WARN")
 logging.addLevelName(ERROR, "ERROR")
 logging.addLevelName(FATAL, "FATAL")
 
@@ -152,7 +107,7 @@ __LOG_NAME__ = ",".join([logging.getLevelName(l).strip() \
                      choices=__LOG_IDX__,
                      default=0,
                      help="the verbosity for log level, " +
-                        "show level upper set by user, "
+                        "show higher level set by user, "
                         "corresponding with " + __LOG_NAME__)
 @cmd.mod_ref("log")
 def Init(args):
@@ -172,17 +127,13 @@ def Init(args):
     logging.info("log module initiate with level: %s",
                  logging.getLevelName(log_level))
 
-@cmd.mod_main("log", help="log test module")
-def test_main(args):
-    print(args)
-
-    print(cmd.ParserStorage.iterate())
-    Init(args)
-    logging.debug("test")
-    logging.info("test")
-    logging.warning("test")
-    logging.error("test")
-
-
 if __name__ == "__main__":
+    @cmd.mod_main("log", help="log test module", entry_type=cmd.EntryType.PRIVATE)
+    def test_main(args):
+        Init(args)
+        logging.debug("test")
+        logging.info("test")
+        logging.warning("test")
+        logging.error("test")
+
     cmd.Run()
