@@ -183,12 +183,13 @@ class CmdEntry:
         entry.func = self.func
 
         if not is_group:
-            enable_opt = CmdOption().register(
-                [self.name.cmd_name],
-                { "action": "store_true",
-                  "help": "enable module %s" % self.name.mod_name }
-            )
-            entry.options.insert(0, enable_opt)
+            if not self.func.empty():
+                enable_opt = CmdOption().register(
+                    [self.name.cmd_name],
+                    { "action": "store_true",
+                      "help": "enable module %s" % self.name.mod_name }
+                )
+                entry.options.insert(0, enable_opt)
 
             entry.params.args = list(entry.params.args)
             entry.params.args.insert(0, self.name.mod_name)
@@ -307,7 +308,7 @@ class CmdStorage:
 
             if not is_exec:
                 raise RuntimeError(
-                    "can not find module [" + entry.name + \
+                    "can not find module [" + entry.name.mod_name + \
                     "] main function to run")
         parser.set_defaults(func=_func)
 
