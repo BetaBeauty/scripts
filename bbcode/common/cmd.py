@@ -42,8 +42,8 @@ import argparse
         multiple times if set in command line.
 """
 
-class LogName:
-    """ Formatted Logger Name
+class CmdName:
+    """ Formatted Cmder Name
 
         1. Dot splitted name, aka "cmd.test"
         2. Array for module names, aka ["cmd", "test"]
@@ -63,22 +63,22 @@ class LogName:
     def __hash__(self):
         return hash(self.name)
 
-    def __eq__(self, other : LogName):
+    def __eq__(self, other : CmdName):
         if isinstance(other, str):
-            other = LogName(other)
+            other = CmdName(other)
         return other.name == self.name
 
     @staticmethod
-    def from_mod_array(mod_arr : Sequence[str]) -> LogName:
-        return LogName(".".join(mod_arr))
+    def from_mod_array(mod_arr : Sequence[str]) -> CmdName:
+        return CmdName(".".join(mod_arr))
 
     @staticmethod
-    def from_cmd_name(cmd_name : str) -> LogName:
-        return LogName(cmd_name.replace("-", "."))
+    def from_cmd_name(cmd_name : str) -> CmdName:
+        return CmdName(cmd_name.replace("-", "."))
 
     @staticmethod
-    def from_arg_name(arg_name : str) -> LogName:
-        return LogName(arg_name.replace("_", "."))
+    def from_arg_name(arg_name : str) -> CmdName:
+        return CmdName(arg_name.replace("_", "."))
 
     @property
     def mod_array(self):
@@ -103,7 +103,7 @@ class LogName:
     def arg_name(self):
         return self.name.replace(".", "_")
 
-class LogOption:
+class CmdOption:
     def __init__(self):
         self.is_init = False
         self.args = []
@@ -142,9 +142,9 @@ class EntryType(Enum):
     def is_public(entry_type):
         return entry_type 
 
-class LogFunction:
+class CmdFunction:
     def __init__(self, entry):
-        self.entry : LogEntry = entry
+        self.entry : CmdEntry = entry
         self.func = None
         self.is_main = False
 
@@ -168,14 +168,14 @@ class LogFunction:
     def empty(self) -> bool:
         return self.func is None
 
-class LogEntry:
-    def __init__(self, name : LogName, entry_type : EntryType):
-        self.name : LogName = name
+class CmdEntry:
+    def __init__(self, name : CmdName, entry_type : EntryType):
+        self.name : CmdName = name
         self.entry_type = entry_type
-        self.options : Sequence[LogOption] = []
-        self.params : LogOption = LogOption()
-        self.func : LogFunction = LogFunction(self)
-        self.groups : Dict[LogName, LogEntry] = {}
+        self.options : Sequence[CmdOption] = []
+        self.params : CmdOption = CmdOption()
+        self.func : CmdFunction = CmdFunction(self)
+        self.groups : Dict[CmdName, CmdEntry] = {}
 
     def to_string(self, new_line=False, print_simple=True):
         prefix = "\n\t" if new_line else " | "
@@ -192,21 +192,21 @@ class LogEntry:
         ser += prefix + "Groups=[%s] " % group_ser
         return ser
 
-    def add_group_entry(self, entry) -> LogEntry:
+    def add_group_entry(self, entry) -> CmdEntry:
         if entry.name in self.groups:
             raise RuntimeError("group " + entry.name + " has been registered")
         self.groups[entry.name] = entry
         return self.groups[entry.name]
 
     def as_group_opt(self, is_group=False):
-        entry = LogEntry(self.name, entry_type=self.entry_type)
+        entry = CmdEntry(self.name, entry_type=self.entry_type)
 
         entry.options = copy.deepcopy(self.options)
         entry.params = copy.deepcopy(self.params)
         entry.func = self.func
 
         if not is_group:
-            enable_opt = LogOption().register(
+            enable_opt = CmdOption().register(
                 [self.name.cmd_name],
                 { "action": "store_true",
                   "help": "enable module %s" % self.name.mod_name }
@@ -235,7 +235,7 @@ class LogEntry:
         return self
 
     def register_option(self, *args, **kw):
-        self.options.append(LogOption().register(args, kw))
+        self.options.append(CmdOption().register(args, kw))
         return self
 
     def references(self):
@@ -246,22 +246,22 @@ class LogEntry:
         if self.name in self.groups:
             del self.groups[self.name]
 
-class LogStorage:
-    STORE : Dict[LogName, LogEntry] = {}
+class CmdStorage:
+    STORE : Dict[CmdName, CmdEntry] = {}
     PARSERS = {}
 
     @staticmethod
-    def get_entry(mod_name, entry_type) -> LogEntry:
+    def get_entry(mod_name, entry_type) -> CmdEntry:
         if isinstance(mod_name, str):
-            mod_name = LogName(mod_name)
+            mod_name = CmdName(mod_name)
 
-        if mod_name not in LogStorage.STORE:
-            LogStorage.STORE[mod_name] = LogEntry(
+        if mod_name not in CmdStorage.STORE:
+            CmdStorage.STORE[mod_name] = CmdEntry(
                 mod_name, entry_type=entry_type)
-        return LogStorage.STORE[mod_name]
+        return CmdStorage.STORE[mod_name]
 
     @staticmethod
-    def dfs_visit(entry : LogEntry, ref_path = []):
+    def dfs_visit(entry : CmdEntry, ref_path = []):
         # pruning for dfs visit
         if getattr(entry, "visited", None):
             return
@@ -273,13 +273,13 @@ class LogStorage:
 
             start = ref_path.index(ref_name)
             for ref in ref_path[start:-1]:
-                ref_entry = LogStorage.STORE.get(ref, LogEntry(ref))
+                ref_entry = CmdStorage.STORE.get(ref, CmdEntry(ref))
                 # TODO: may cause undeterministic behavior, since
                 #   group names may be duplicated.
                 common_groups.update(ref_entry.collect_group_opts())
 
             for idx, ref in enumerate(ref_path[start:-1]):
-                ref_entry = LogStorage.STORE.get(ref, LogEntry(ref))
+                ref_entry = CmdStorage.STORE.get(ref, CmdEntry(ref))
                 # remove dependency reference in ref_path
                 ref_entry.references().remove(ref_path[start+idx+1])
                 ref_entry.groups.update(common_groups)
@@ -292,19 +292,19 @@ class LogStorage:
             if ref in ref_path:
                 _trigger_cycle_path(ref)
                 continue
-            ref_entry = LogStorage.get_entry(ref, EntryType.GLOBAL)
-            LogStorage.dfs_visit(ref_entry, ref_path)
+            ref_entry = CmdStorage.get_entry(ref, EntryType.GLOBAL)
+            CmdStorage.dfs_visit(ref_entry, ref_path)
 
         # remove refs and update current entry's groups
         for ref in entry.references():
-            ref_entry = LogStorage.get_entry(ref, EntryType.GLOBAL)
+            ref_entry = CmdStorage.get_entry(ref, EntryType.GLOBAL)
             entry.groups.update(ref_entry.collect_group_opts())
 
         setattr(entry, "visited", True)
         ref_path.remove(entry.name)
 
     @staticmethod
-    def init_parser(parser : argparse.ArgumentParser, entry : LogEntry):
+    def init_parser(parser : argparse.ArgumentParser, entry : CmdEntry):
         for group in entry.groups.values():
             group.normalize()
             gparser = parser.add_argument_group(
@@ -345,44 +345,44 @@ class LogStorage:
         entry.normalize()
         mod_parser = parser_object["sub_parser"].add_parser(
             mod_name, *entry.params.args, **entry.params.kw)
-        LogStorage.init_parser(mod_parser, entry)
+        CmdStorage.init_parser(mod_parser, entry)
         parser_object[mod_name] = { "parser": mod_parser, }
         return mod_parser
 
     @staticmethod
     def init_parsers() -> argparse.ArgumentParser:
-        for entry in LogStorage.STORE.values():
-            LogStorage.dfs_visit(entry)
+        for entry in CmdStorage.STORE.values():
+            CmdStorage.dfs_visit(entry)
 
-        root_entry = LogEntry("", entry_type=EntryType.GLOBAL)
+        root_entry = CmdEntry("", entry_type=EntryType.GLOBAL)
         root_entry.register_parser(
             description="bbcode helper script, implemented via python3")
-        root_entry = LogStorage.STORE.get("", root_entry)
+        root_entry = CmdStorage.STORE.get("", root_entry)
 
         root_entry.normalize()
         root_parser = argparse.ArgumentParser(
-            *root_entry.params.args, **entry.params.kw)
-        LogStorage.init_parser(root_parser, root_entry)
+            *root_entry.params.args, **root_entry.params.kw)
+        CmdStorage.init_parser(root_parser, root_entry)
 
         # set root parser object
-        LogStorage.PARSERS["parser"] = root_parser
+        CmdStorage.PARSERS["parser"] = root_parser
 
-        for entry in LogStorage.STORE.values():
-            parser_object = LogStorage.PARSERS
+        for entry in CmdStorage.STORE.values():
+            parser_object = CmdStorage.PARSERS
             for mod_name, prefix in zip(
                     entry.name.mod_array, entry.name.mod_prefix_arr):
                 if mod_name not in parser_object:
-                    mod_entry = LogStorage.STORE.get(
-                        prefix, LogEntry(prefix, EntryType.GLOBAL))
-                    LogStorage.init_parser_object(
+                    mod_entry = CmdStorage.STORE.get(
+                        prefix, CmdEntry(prefix, EntryType.GLOBAL))
+                    CmdStorage.init_parser_object(
                         parser_object, mod_name, mod_entry)
                 parser_object = parser_object[mod_name]
         return root_parser
 
     @staticmethod
     def get_parser(parser_path) -> argparse.ArgumentParser:
-        parser_object = LogStorage.PARSERS
-        for mod_name in LogName(parser_path).mod_array:
+        parser_object = CmdStorage.PARSERS
+        for mod_name in CmdName(parser_path).mod_array:
             if mod_name not in parser_object:
                 raise RuntimeError("cannot find parser: " + parser_path)
             parser_object = parser_object[mod_name]
@@ -393,28 +393,28 @@ class LogStorage:
 """
 
 def register_option(*args, **kw):
-    def _func(func : LogFunction):
+    def _func(func : CmdFunction):
         func.entry.register_option(*args, **kw)
         return func
     return _func
 
 def mod_ref(mod_name = "", entry_type = EntryType.GLOBAL):
-    mod_entry = LogStorage.get_entry(mod_name, entry_type)
+    mod_entry = CmdStorage.get_entry(mod_name, entry_type)
     mod_entry.func.is_main = False
     return mod_entry.func.wrapper
 
 def mod_main(mod_name = "", *args, entry_type = EntryType.GLOBAL, **kw):
-    mod_entry = LogStorage.get_entry(mod_name, entry_type)
+    mod_entry = CmdStorage.get_entry(mod_name, entry_type)
     mod_entry.register_parser(*args, **kw)
     mod_entry.func.is_main = True
     return mod_entry.func.wrapper
 
 def group_ref(mod_name = "", entry_type = EntryType.GLOBAL):
-    mod_entry = LogStorage.get_entry(mod_name, entry_type)
+    mod_entry = CmdStorage.get_entry(mod_name, entry_type)
     def _func(func):
-        group_name = LogName.from_arg_name(func.__name__)
+        group_name = CmdName.from_arg_name(func.__name__)
         desc = func.__doc__
-        group_entry = LogEntry(group_name, entry_type)
+        group_entry = CmdEntry(group_name, entry_type)
 
         group_entry.func.wrapper(func)
         group_entry.func.is_main = True
@@ -426,11 +426,11 @@ def group_ref(mod_name = "", entry_type = EntryType.GLOBAL):
     return _func
 
 def group_main(mod_name = "", entry_type = EntryType.GLOBAL):
-    mod_entry = LogStorage.get_entry(mod_name, entry_type)
+    mod_entry = CmdStorage.get_entry(mod_name, entry_type)
     def _func(func):
-        group_name = LogName.from_arg_name(func.__name__)
+        group_name = CmdName.from_arg_name(func.__name__)
         desc = func.__doc__
-        group_entry = LogEntry(group_name, entry_type)
+        group_entry = CmdEntry(group_name, entry_type)
 
         group_entry.func.wrapper(func)
         group_entry.func.is_main = True
@@ -445,7 +445,7 @@ def group_main(mod_name = "", entry_type = EntryType.GLOBAL):
     return _func
 
 def Run():
-    root_parser = LogStorage.init_parsers()
+    root_parser = CmdStorage.init_parsers()
     args = root_parser.parse_args()
 
     if getattr(args, "func", None):
