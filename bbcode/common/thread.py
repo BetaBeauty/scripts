@@ -1,9 +1,8 @@
 import os
 import sys
 import logging
+import signal
 from threading import Event, Thread
-
-logger = logging.getLogger("zknode.thread")
 
 _QUIT_EVENT_ = Event()
 
@@ -23,6 +22,7 @@ def wait(timeout):
 # service module
 
 __REGISTER_SERVICES__ = {}
+logger = logging.getLogger("service")
 
 class ThreadFunc:
     def __init__(self, func):
@@ -57,7 +57,7 @@ def register_stop_handler(name):
 def _stop_service(signo=2, _frame=None):
     _QUIT_EVENT_.set()
 
-    for name, func in _REGISTER_SERVICES_.items():
+    for name, func in __REGISTER_SERVICES__.items():
         logger.info("STOP SERVICE - {}".format(name))
         func.stop()
 
@@ -67,6 +67,6 @@ def Run(*args, **kw):
             getattr(signal, 'SIG'+sig),
             _stop_service);
 
-    for name, func in _REGISTER_SERVICES_.items():
+    for name, func in __REGISTER_SERVICES__.items():
         logger.info("START SERVICE - {}".format(name))
         func.start(*args, **kw)
