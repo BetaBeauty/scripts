@@ -13,7 +13,7 @@ def as_thread_func(func):
         return t
     return _container
 
-def wait(timeout):
+def wait_or_exit(timeout):
     _QUIT_EVENT_.wait(timeout)
 
     if _QUIT_EVENT_.is_set():
@@ -55,6 +55,7 @@ def register_stop_handler(name):
     return _func
 
 def _stop_service(signo=2, _frame=None):
+    print("\n\n")
     logger.info("shutting down ...")
     _QUIT_EVENT_.set()
 

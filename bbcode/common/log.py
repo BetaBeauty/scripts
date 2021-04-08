@@ -113,7 +113,7 @@ def Init(args):
     log_level = __LOG_VERBOSITY__[args.verbosity]
     logging.basicConfig(level=log_level)
     formatter = ColorFormatter(
-            fmt="[ %(asctime)s %(name)s %(levelname)s ] %(message)s",
+            fmt="[ %(asctime)s %(name)10s %(levelname)s ] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S")
 
     log_filter = FilterList(

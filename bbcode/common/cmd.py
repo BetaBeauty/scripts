@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence, Dict
+from typing import Sequence, Dict, Set
 from typing import Callable
 
 import copy
@@ -125,6 +125,8 @@ class CmdOption:
 class EntryType(Enum):
     PUBLIC = 0
     PRIVATE = 1
+    # TODO: module options accessable to mod main, not other module
+    PROTECT = 2
 
 class CmdFunction:
     def __init__(self, entry):
@@ -150,9 +152,10 @@ class CmdFunction:
         return self.func is None
 
 class CmdEntry:
-    def __init__(self, name : CmdName, entry_type : EntryType):
+    def __init__(self, name : CmdName):
         self.name : CmdName = name
-        self.entry_type = entry_type
+        self.entry_type = EntryType.PUBLIC
+        self.references : Set[str] = set()
         self.options : Sequence[CmdOption] = []
         self.params : CmdOption = CmdOption()
         self.func : CmdFunction = CmdFunction(self)
@@ -180,8 +183,9 @@ class CmdEntry:
         return self.groups[entry.name]
 
     def as_group_opt(self, is_group=False):
-        entry = CmdEntry(self.name, entry_type=self.entry_type)
+        entry = CmdEntry(self.name)
 
+        entry.entry_type = self.entry_type
         entry.options = copy.deepcopy(self.options)
         entry.params = copy.deepcopy(self.params)
         entry.func = self.func
@@ -207,12 +211,12 @@ class CmdEntry:
             groups[self.name] = self.as_group_opt()
         return groups
 
-    def register_parser(self, *args, refs = [], **kw):
+    def register_parser(self, *args, refs = set(), **kw):
         if self.params.is_init:
             raise RuntimeError("log entry parser:" + self.name + \
                 " has been registered")
 
-        kw["refs"] = refs
+        self.references.update(refs)
         self.params.register(args, kw)
         return self
 
@@ -220,11 +224,7 @@ class CmdEntry:
         self.options.append(CmdOption().register(args, kw))
         return self
 
-    def references(self):
-        return self.params.kw.get("refs", [])
-
     def normalize(self):
-        self.params.kw.pop("refs", [])
         if self.name in self.groups:
             del self.groups[self.name]
 
@@ -233,13 +233,12 @@ class CmdStorage:
     PARSERS = {}
 
     @staticmethod
-    def get_entry(mod_name, entry_type = EntryType.PUBLIC) -> CmdEntry:
+    def get_entry(mod_name) -> CmdEntry:
         if isinstance(mod_name, str):
             mod_name = CmdName(mod_name)
 
         if mod_name not in CmdStorage.STORE:
-            CmdStorage.STORE[mod_name] = CmdEntry(
-                mod_name, entry_type=entry_type)
+            CmdStorage.STORE[mod_name] = CmdEntry(mod_name)
         return CmdStorage.STORE[mod_name]
 
     @staticmethod
@@ -263,14 +262,14 @@ class CmdStorage:
             for idx, ref in enumerate(ref_path[start:-1]):
                 ref_entry = CmdStorage.get_entry(ref, CmdEntry(ref))
                 # remove dependency reference in ref_path
-                ref_entry.references().remove(ref_path[start+idx+1])
+                ref_entry.references.remove(ref_path[start+idx+1])
                 ref_entry.groups.update(common_groups)
 
             ref_path.pop(-1)
 
         ref_path.append(entry.name)
 
-        for ref in entry.references():
+        for ref in entry.references:
             if ref in ref_path:
                 _trigger_cycle_path(ref)
                 continue
@@ -278,7 +277,7 @@ class CmdStorage:
             CmdStorage.dfs_visit(ref_entry, ref_path)
 
         # remove refs and update current entry's groups
-        for ref in entry.references():
+        for ref in entry.references:
             ref_entry = CmdStorage.get_entry(ref)
             entry.groups.update(ref_entry.collect_group_opts())
 
@@ -346,10 +345,10 @@ class CmdStorage:
             if not has_main_entry:
                 del CmdStorage.STORE[name]
 
-        root_entry = CmdEntry("", entry_type=EntryType.PUBLIC)
+        root_entry = CmdEntry("")
         root_entry.register_parser(
             description="bbcode helper script, implemented via python3")
-        root_entry = CmdStorage.get_entry("", root_entry)
+        root_entry = CmdStorage.STORE.get("", root_entry)
 
         root_entry.normalize()
         root_parser = argparse.ArgumentParser(
@@ -414,22 +413,28 @@ def register_option(*args, **kw):
         return func
     return _func
 
-def mod_ref(mod_name = "", entry_type = EntryType.PUBLIC):
-    mod_entry = CmdStorage.get_entry(mod_name, entry_type)
+def mod_ref(mod_name = "", refs = []):
+    mod_entry = CmdStorage.get_entry(mod_name)
+    mod_entry.references.update(refs)
     func = CmdFunction(mod_entry)
     return func.wrapper
 
-def mod_main(mod_name = "", *args, entry_type = EntryType.PUBLIC, **kw):
-    mod_entry = CmdStorage.get_entry(mod_name, entry_type)
+def mod_main(mod_name = "", *args,
+             refs = [],
+             entry_type = EntryType.PUBLIC, **kw):
+    mod_entry = CmdStorage.get_entry(mod_name)
+    mod_entry.entry_type = entry_type
+    mod_entry.references.update(refs)
     mod_entry.register_parser(*args, **kw)
     return mod_entry.func.wrapper
 
 def group_ref(mod_name = "", entry_type = EntryType.PUBLIC):
-    mod_entry = CmdStorage.get_entry(mod_name, entry_type)
+    mod_entry = CmdStorage.get_entry(mod_name)
     def _func(func):
         group_name = CmdName.from_arg_name(func.__name__)
         desc = func.__doc__
-        group_entry = CmdEntry(group_name, entry_type)
+        group_entry = CmdEntry(group_name)
+        group_entry.entry_type = entry_type
         group_entry.register_parser(group_name.mod_name, description=desc)
         mod_entry.add_group_entry(group_entry)
 
@@ -439,11 +444,12 @@ def group_ref(mod_name = "", entry_type = EntryType.PUBLIC):
     return _func
 
 def group_main(mod_name = "", entry_type = EntryType.PUBLIC):
-    mod_entry = CmdStorage.get_entry(mod_name, entry_type)
+    mod_entry = CmdStorage.get_entry(mod_name)
     def _func(func):
         group_name = CmdName.from_arg_name(func.__name__)
         desc = func.__doc__
-        group_entry = CmdEntry(group_name, entry_type)
+        group_entry = CmdEntry(group_name)
+        group_entry.entry_type = entry_type
         group_entry.register_parser(group_name.mod_name, description=desc)
         group_entry.register_option(group_name.cmd_name,
                                     action="store_true",
