@@ -55,10 +55,11 @@ def register_stop_handler(name):
     return _func
 
 def _stop_service(signo=2, _frame=None):
+    logger.info("shutting down ...")
     _QUIT_EVENT_.set()
 
     for name, func in __REGISTER_SERVICES__.items():
-        logger.info("STOP SERVICE - {}".format(name))
+        logger.info("stop service - {}".format(name))
         func.stop()
 
 def Run(*args, **kw):
@@ -68,5 +69,5 @@ def Run(*args, **kw):
             _stop_service);
 
     for name, func in __REGISTER_SERVICES__.items():
-        logger.info("START SERVICE - {}".format(name))
+        logger.info("start service - {}".format(name))
         func.start(*args, **kw)
