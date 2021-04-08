@@ -384,6 +384,31 @@ class CmdStorage:
 """
 
 def register_option(*args, **kw):
+    """ ArgParse:add_argument function wrapper options
+
+        Parameters
+        ==========
+
+        name or flags: aka "-f", "--foo"
+        action: available options are
+            "store"(default),
+            "store_const",
+            "store_true", "store_false",
+            "append", "append_const",
+            "count",
+            "help"(disabled),
+            "version", "extend"
+        nargs:
+        const:
+        default: store default value, None by default
+        type: argument type
+        choices: available options
+        required: make optional argument required like "-f"
+        help: print help information
+        metavar: meta variable in usage
+        dest:
+
+    """
     def _func(func : CmdFunction):
         func.entry.register_option(*args, **kw)
         return func

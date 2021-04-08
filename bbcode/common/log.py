@@ -98,14 +98,13 @@ logging.addLevelName(FATAL, "FATAL")
 
 __LOG_VERBOSITY__ = [TRACE, DEBUG, INFO, WARN, ERROR, FATAL]
 __LOG_IDX__ = list(range(len(__LOG_VERBOSITY__)))
-__LOG_NAME__ = ",".join([logging.getLevelName(l).strip() \
-    + "(" + str(n) + ")" \
+__LOG_NAME__ = ",".join(
+    ["{}({})".format(n, logging.getLevelName(l).strip()) \
     for l, n in zip(__LOG_VERBOSITY__, __LOG_IDX__)])
 
 @cmd.register_option("-v", "--verbosity",
-                     type=int,
-                     choices=__LOG_IDX__,
-                     default=0,
+                     type=int, choices=__LOG_IDX__,
+                     metavar="LEVEL", default=0,
                      help="the verbosity for log level, " +
                         "show higher level set by user, "
                         "corresponding with " + __LOG_NAME__)
