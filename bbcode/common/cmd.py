@@ -1,13 +1,3 @@
-from __future__ import annotations
-
-from typing import Sequence, Dict, Set
-from typing import Callable
-
-import copy
-from enum import Enum
-
-import argparse
-
 """ BBCode CMD Module Design
 
     The target is to auto inject command line parser into registry
@@ -40,7 +30,60 @@ import argparse
     @func group_ref: Group reference function.
     @func group_main: Group main function, which will be execute
         multiple times if set in command line.
+    @func register_option: Wrapper function by the `add_argument` in
+        `argparse.ArgumentParser`.
+
+    Notices: The main entry must be zero or one instance, or will raise
+        error.
+
+    ModuleEntry
+    ===========
+    A module entry acts as an sub command at shell, like `git status`.
+    The module interface contains `mod_ref` and `mod_main`, which refer
+    to the same `CmdEntry` instance. The entry will be achieved via the
+    sub parsers method defined in argparse library.
+
+    GroupEntry
+    ==========
+    A group entry is represented as optional arguments in command line,
+    but could execute multi-group main function in single command,
+    different from the module entry.
+
+    EntryType
+    =========
+    The options registered by register_option may be collected as
+        cluster, which has permission access, like public, private, ...
+        etc. We'd like to support more feasible and extensible usage for
+        developers, provided the problems occured in naive coding and
+        reported to us.
+    TODO: Current interface introduced at last section is proved to be
+        not so practicable and available, since programmers may want to
+        collect options as cluster in one function and can control the
+        permission whether it can be access via other group or current
+        mod main. Refer to C language, we will try the same permission
+        primitive first and then update more complicated control system
+        if not satisfied.
+    @PUBLIC:
+    @PROTECT:
+    @PRIVATE:
+
+    >>> @register_option("-p", "--pool-size")
+    >>> @mod_ref("cmd.test", permission="PROTECT")
+    >>> def cmd_test(args):
+    >>>     pass
+
 """
+
+from __future__ import annotations
+
+from typing import Sequence, Dict, Set
+from typing import Callable
+
+import copy
+import json
+from enum import Enum
+
+import argparse
 
 class CmdName:
     """ Formatted Cmder Name
@@ -107,30 +150,37 @@ class CmdName:
     def topo_sort(cmd_names : Sequence[CmdName]) -> Sequence[CmdName]:
         return sorted(cmd_names, key=lambda x : len(x.name), reverse=True)
 
-class CmdOption:
-    def __init__(self):
-        self.is_init = False
-        self.args = []
-        self.kw = {}
-
-    def register(self, args, kw):
-        self.is_init = True
-        self.args = args
-        self.kw = kw
-        return self
-
-    def __repr__(self):
-        return "@Opt(%s,%s)" % (self.args, self.kw)
-
 class EntryType(Enum):
     PUBLIC = 0
     PRIVATE = 1
     # TODO: module options accessable to mod main, not other module
     PROTECT = 2
 
+class CmdOption:
+    def __init__(self, *args, **kw):
+        self.args = args
+        self.kw = kw
+
+    def __repr__(self):
+        return "<%s,%s>" % (self.args, self.kw)
+
+class GroupOption:
+    def __init__(self, entry_type : EntryType):
+        self.options : Sequence[CmdOption] = []
+        self.entry_type = entry_type
+
+    def add_option(self, *args, **kw):
+        self.options.append(CmdOption(*args, **kw))
+
+    def to_string(self):
+        ser = ", ".join([str(o) for o in self.options])
+        type_str = "PUBLIC" if self.entry_type == EntryType.PUBLIC else "PRIVATE"
+        return "%s [%s]" % (type_str, ser)
+
 class CmdFunction:
-    def __init__(self, entry):
-        self.entry : CmdEntry = entry
+    def __init__(self, group_opt : GroupOption):
+        # TODO: add support group option register
+        self.options : GroupOption  = group_opt
         self.func = None
 
     def __repr__(self):
@@ -151,168 +201,180 @@ class CmdFunction:
     def empty(self) -> bool:
         return self.func is None
 
-class CmdEntry:
+class GroupEntry:
     def __init__(self, name : CmdName):
+        assert isinstance(name, CmdName)
         self.name : CmdName = name
-        self.entry_type = EntryType.PUBLIC
-        self.references : Set[str] = set()
-        self.options : Sequence[CmdOption] = []
+        self.options : Sequence[GroupOption] = []
         self.params : CmdOption = CmdOption()
-        self.func : CmdFunction = CmdFunction(self)
-        self.groups : Dict[CmdName, CmdEntry] = {}
+        self.func : CmdFunction = CmdFunction(
+            self.group_option(EntryType.PUBLIC))
 
-    def to_string(self, new_line=False, print_simple=True):
-        prefix = "\n\t" if new_line else " | "
+    def register_parser(self, *args, **kw):
+        self.params.args = args
+        self.params.kw = kw
+        return self
 
-        ser = "Name=%s" % self.name
-        ser += prefix + "Params=%s" % self.params
-        ser += prefix + "Options=%s" % self.options
-        if print_simple:
-            group_ser = ", ".join(v.name for v in self.groups.values())
-        else:
-            group_ser = ",\n\t".join([v.to_string() \
-                for v in self.groups.values()])
-            group_ser = "\n\t" + group_ser + "\n"
-        ser += prefix + "Groups=[%s] " % group_ser
+    def to_string(self, new_line = False):
+        split_str = "\n\t" if new_line else " "
+        ser = "name=%s " % self.name.name
+        ser += "params=%s " % str(self.params)
+
+        opt_str = ("," + split_str).join([o.to_string() \
+            for o in self.options if o.options])
+        ser += "options=[%s%s] " % (split_str, opt_str)
         return ser
 
-    def add_group_entry(self, entry) -> CmdEntry:
-        if entry.name in self.groups:
-            raise RuntimeError("group " + entry.name + " has been registered")
-        self.groups[entry.name] = entry
-        return self.groups[entry.name]
+    def by_main_func(self, entry_type) -> CmdFunction:
+        self.func.options.entry_type = entry_type
+        return self.func
 
-    def as_group_opt(self, is_group=False):
-        entry = CmdEntry(self.name)
+    def by_pass_func(self, entry_type) -> CmdFunction:
+        return CmdFunction(self.group_option(entry_type))
 
-        entry.entry_type = self.entry_type
-        entry.options = copy.deepcopy(self.options)
-        entry.params = copy.deepcopy(self.params)
-        entry.func = self.func
+    def group_option(self, entry_type) -> GroupOption:
+        self.options.append(GroupOption(entry_type))
+        return self.options[-1]
 
-        if not is_group:
-            if not self.func.empty():
-                enable_opt = CmdOption().register(
-                    [self.name.cmd_name],
-                    { "action": "store_true",
-                      "help": "enable module %s" % self.name.mod_name }
-                )
-                entry.options.insert(0, enable_opt)
+    def public_group_entry(self) -> GroupEntry:
+        gentry = GroupEntry(self.name)
+        gentry.options = [opt for opt in self.options \
+            if opt.entry_type == EntryType.PUBLIC]
+        gentry.params = self.params
+        gentry.func = self.func
+        return gentry
 
-            entry.params.args = list(entry.params.args)
-            entry.params.args.insert(0, self.name.mod_name)
-        return entry
+class ModEntry(GroupEntry):
+    def __init__(self, name : CmdName):
+        super(ModEntry, self).__init__(name)
+        self.references : Set[str] = set()
+        self.groups : Dict[CmdName, GroupEntry] = {}
 
-    def collect_group_opts(self):
-        groups = {k: v.as_group_opt(is_group=True) \
-            for k, v in self.groups.items() \
-                if v.entry_type == EntryType.PUBLIC}
-        if self.entry_type == EntryType.PUBLIC:
-            groups[self.name] = self.as_group_opt()
-        return groups
+    def to_string(self, new_line = True):
+        split_str = "\n\t" if new_line else " "
+        ser = super(ModEntry, self).to_string()
+        gser = "".join(["," + split_str + v.to_string() \
+            for v in self.groups.values()])
+        ser += "groups=[%s]" % gser
+        return ser
 
-    def register_parser(self, *args, refs = set(), **kw):
-        if self.params.is_init:
-            raise RuntimeError("log entry parser:" + self.name + \
-                " has been registered")
+    def register_parser(self, *args, refs = [], **kw) -> ModEntry:
+        return super(ModEntry, self).register_parser(*args, **kw)
 
-        self.references.update(refs)
-        self.params.register(args, kw)
-        return self
+    def group_entry(self, group_name : str) -> GroupEntry:
+        if group_name not in self.groups:
+            self.groups[group_name] = GroupEntry(group_name)
+        return self.groups[group_name]
 
-    def register_option(self, *args, **kw):
-        self.options.append(CmdOption().register(args, kw))
-        return self
+    def public_group_entry(self) -> GroupEntry:
+        gentry = super(ModEntry, self).public_group_entry()
 
-    def normalize(self):
-        if self.name in self.groups:
-            del self.groups[self.name]
+        if not self.func.empty():
+            gopt = GroupOption(self.func.options.entry_type)
+            gopt.add_option(
+                self.name.cmd_name,
+                action="store_true",
+                help="enable module " + self.name.mod_name)
+            gentry.options.insert(0, gopt)
+
+        gentry.params = copy.deepcopy(self.params)
+        gentry.params.args = list(self.params.args)
+        gentry.params.args.insert(0, self.name.mod_name)
+        return gentry
 
 class CmdStorage:
-    STORE : Dict[CmdName, CmdEntry] = {}
+    STORE : Dict[CmdName, ModEntry] = {}
     PARSERS = {}
 
     @staticmethod
-    def get_entry(mod_name) -> CmdEntry:
+    def get_entry(mod_name, default = None) -> ModEntry:
         if isinstance(mod_name, str):
             mod_name = CmdName(mod_name)
 
         if mod_name not in CmdStorage.STORE:
-            CmdStorage.STORE[mod_name] = CmdEntry(mod_name)
+            if default is None:
+                default = ModEntry(mod_name)
+            CmdStorage.STORE[mod_name] = default
         return CmdStorage.STORE[mod_name]
 
     @staticmethod
-    def dfs_visit(entry : CmdEntry, ref_path = []):
-        # pruning for dfs visit
+    def refer_analysis(entry : ModEntry, ref_path = []):
+        # quick pruning for reference analisis 
         if getattr(entry, "visited", None):
             return
+
+        refers = {n: CmdStorage.get_entry(n) for n in entry.references}
 
         def _trigger_cycle_path(ref_name):
             common_groups = {}
 
             ref_path.append(ref_name)
-
             start = ref_path.index(ref_name)
-            for ref in ref_path[start:-1]:
-                ref_entry = CmdStorage.get_entry(ref, CmdEntry(ref))
+            for ref_name in ref_path[start:-1]:
+                ref_entry = CmdStorage.get_entry(ref_name)
                 # TODO: may cause undeterministic behavior, since
                 #   group names may be duplicated.
-                common_groups.update(ref_entry.collect_group_opts())
+                common_groups[ref_name] = ref_entry.public_group_entry()
+                for k, v in ref_entry.groups.items():
+                    common_groups[k] = v.public_group_entry()
 
-            for idx, ref in enumerate(ref_path[start:-1]):
-                ref_entry = CmdStorage.get_entry(ref, CmdEntry(ref))
+            for idx, ref_name in enumerate(ref_path[start:-1]):
+                ref_entry = CmdStorage.get_entry(ref_name)
                 # remove dependency reference in ref_path
                 ref_entry.references.remove(ref_path[start+idx+1])
-                ref_entry.groups.update(common_groups)
+                for k, v in common_groups.items():
+                    if k not in ref_entry.groups:
+                        ref_entry.groups[k] = v
 
             ref_path.pop(-1)
 
         ref_path.append(entry.name)
 
-        for ref in entry.references:
-            if ref in ref_path:
-                _trigger_cycle_path(ref)
+        for ref_name, ref_entry in refers.items():
+            if ref_name in ref_path:
+                _trigger_cycle_path(ref_name)
                 continue
-            ref_entry = CmdStorage.get_entry(ref)
-            CmdStorage.dfs_visit(ref_entry, ref_path)
+            CmdStorage.refer_analysis(ref_entry, ref_path)
 
         # remove refs and update current entry's groups
-        for ref in entry.references:
-            ref_entry = CmdStorage.get_entry(ref)
-            entry.groups.update(ref_entry.collect_group_opts())
+        for ref_name, ref_entry in refers.items():
+            entry.groups[ref_name] = ref_entry.public_group_entry()
+            for k, v in ref_entry.groups.items():
+                if k not in entry.groups:
+                    entry.groups[k] = v.public_group_entry()
+
+        if entry.name in entry.groups:
+            del entry.groups[entry.name]
 
         setattr(entry, "visited", True)
         ref_path.remove(entry.name)
 
     @staticmethod
-    def init_parser(parser : argparse.ArgumentParser, entry : CmdEntry):
+    def init_parser(parser : argparse.ArgumentParser, entry : ModEntry):
         for group in entry.groups.values():
-            group.normalize()
             gparser = parser.add_argument_group(
                 *group.params.args, **group.params.kw)
-            for opt in group.options:
-                gparser.add_argument(*opt.args, **opt.kw)
+            for gopt in group.options:
+                for opt in gopt.options:
+                    gparser.add_argument(*opt.args, **opt.kw)
 
-        for opt in entry.options:
-            parser.add_argument(*opt.args, **opt.kw)
-
+        for gopt in entry.options:
+            for opt in gopt.options:
+                parser.add_argument(*opt.args, **opt.kw)
 
         def _func(args):
-            is_exec = False
             for group in entry.groups.values():
-                if getattr(args, group.name.arg_name, None) and \
-                        not group.func.empty():
-                    group.func(args)
-                    is_exec = True
+                if group.func.empty():
+                    continue
+                if getattr(args, group.name.arg_name, None):
+                    return group.func(args)
 
-            if not is_exec and not entry.func.empty():
-                is_exec = True
-                entry.func(args)
+            if not entry.func.empty():
+                return entry.func(args)
 
-            if not is_exec:
-                raise RuntimeError(
-                    "can not find module [" + entry.name.mod_name + \
-                    "] main function to run")
+            raise RuntimeError(
+                "can not find module [" + entry.name.mod_name + \
+                "] main function to run")
         parser.set_defaults(func=_func)
 
     @staticmethod
@@ -323,7 +385,6 @@ class CmdStorage:
                     title = "COMMAND",
                     description = "collective sub commands")
 
-        entry.normalize()
         mod_parser = parser_object["sub_parser"].add_parser(
             mod_name, *entry.params.args, **entry.params.kw)
         CmdStorage.init_parser(mod_parser, entry)
@@ -332,8 +393,14 @@ class CmdStorage:
 
     @staticmethod
     def init_parsers() -> argparse.ArgumentParser:
+        # init root parser descriptions
+        root_entry = ModEntry(CmdName(""))
+        root_entry.register_parser(
+            description="bbcode helper script, implemented via python3")
+        root_entry = CmdStorage.get_entry("", default=root_entry)
+
         for entry in list(CmdStorage.STORE.values()):
-            CmdStorage.dfs_visit(entry)
+            CmdStorage.refer_analysis(entry)
 
         # remove unuseful module path
         for name in CmdName.topo_sort(CmdStorage.STORE.keys()):
@@ -345,12 +412,6 @@ class CmdStorage:
             if not has_main_entry:
                 del CmdStorage.STORE[name]
 
-        root_entry = CmdEntry("")
-        root_entry.register_parser(
-            description="bbcode helper script, implemented via python3")
-        root_entry = CmdStorage.STORE.get("", root_entry)
-
-        root_entry.normalize()
         root_parser = argparse.ArgumentParser(
             *root_entry.params.args, **root_entry.params.kw)
         CmdStorage.init_parser(root_parser, root_entry)
@@ -358,7 +419,7 @@ class CmdStorage:
         # set root parser object
         CmdStorage.PARSERS["parser"] = root_parser
 
-        for entry in CmdStorage.STORE.values():
+        for entry in list(CmdStorage.STORE.values()):
             parser_object = CmdStorage.PARSERS
             for mod_name, prefix in zip(
                     entry.name.mod_array, entry.name.mod_prefix_arr):
@@ -382,7 +443,7 @@ class CmdStorage:
 """ CMD Registration API
 """
 
-def register_option(*args, **kw):
+def option(*args, **kw):
     """ ArgParse:add_argument function wrapper options
 
         Parameters
@@ -409,55 +470,43 @@ def register_option(*args, **kw):
 
     """
     def _func(func : CmdFunction):
-        func.entry.register_option(*args, **kw)
+        func.options.add_option(*args, **kw)
         return func
     return _func
 
-def mod_ref(mod_name = "", refs = []):
+def module(mod_name, *args,
+        refs = [], as_main = False,
+        entry_type=EntryType.PUBLIC, **kw):
     mod_entry = CmdStorage.get_entry(mod_name)
     mod_entry.references.update(refs)
-    func = CmdFunction(mod_entry)
-    return func.wrapper
+    if as_main:
+        mod_entry.register_parser(*args, **kw)
+        return mod_entry.by_main_func(entry_type).wrapper
+    return mod_entry.by_pass_func(entry_type).wrapper
 
-def mod_main(mod_name = "", *args,
-             refs = [],
-             entry_type = EntryType.PUBLIC, **kw):
-    mod_entry = CmdStorage.get_entry(mod_name)
-    mod_entry.entry_type = entry_type
-    mod_entry.references.update(refs)
-    mod_entry.register_parser(*args, **kw)
-    return mod_entry.func.wrapper
-
-def group_ref(mod_name = "", entry_type = EntryType.PUBLIC):
+def group(mod_name, group_name = None,
+          as_main = False, desc = None,
+          entry_type = EntryType.PRIVATE):
     mod_entry = CmdStorage.get_entry(mod_name)
     def _func(func):
-        group_name = CmdName.from_arg_name(func.__name__)
-        desc = func.__doc__
-        group_entry = CmdEntry(group_name)
-        group_entry.entry_type = entry_type
-        group_entry.register_parser(group_name.mod_name, description=desc)
-        mod_entry.add_group_entry(group_entry)
+        gname = group_name
+        if gname is None:
+            gname = CmdName.from_arg_name(func.__name__)
+        gentry = mod_entry.group_entry(gname)
 
-        gfunc = CmdFunction(group_entry)
-        gfunc.wrapper(func)
-        return gfunc
-    return _func
+        description = func.__doc__ if desc is None else desc
+        gentry.register_parser(gentry.name.mod_name,
+                               description=description)
 
-def group_main(mod_name = "", entry_type = EntryType.PUBLIC):
-    mod_entry = CmdStorage.get_entry(mod_name)
-    def _func(func):
-        group_name = CmdName.from_arg_name(func.__name__)
-        desc = func.__doc__
-        group_entry = CmdEntry(group_name)
-        group_entry.entry_type = entry_type
-        group_entry.register_parser(group_name.mod_name, description=desc)
-        group_entry.register_option(group_name.cmd_name,
-                                    action="store_true",
-                                    help="enable module " + group_name.mod_name)
-        mod_entry.add_group_entry(group_entry)
-
-        group_entry.func.wrapper(func)
-        return group_entry.func
+        if as_main:
+            gfunc = gentry.by_main_func(entry_type)
+            gfunc.options.add_option(
+                gentry.name.cmd_name,
+                action="store_true",
+                help="enable module " + gentry.name.mod_name)
+        else:
+            gfunc = mod_entry.by_pass_func(entry_type)
+        return gfunc.wrapper(func)
     return _func
 
 def Run():
@@ -476,8 +525,28 @@ def Run():
 """ CMD Test Code and Command Line
 """
 def register_test_func():
-    @register_option("--group-opt2", action="store_true")
-    @group_ref("log")
+    @option("--opt-a", help="opt a")
+    @module("a", refs=["b"])
+    def mod_a(args):
+        print("a")
+
+    @option("--opt-b", help="opt b")
+    @module("b", as_main=True, refs=["c"])
+    def mod_b(args):
+        print("b")
+
+    @option("--opt-c", help="opt c")
+    @module("c", refs=["a"])
+    def mod_c(args):
+        print("c")
+
+    @option("--opt-d", help="opt d")
+    @module("d")
+    def mod_d(args):
+        print("d")
+
+    @option("--group-opt2", action="store_true")
+    @module("log", as_main=True, refs=["c"])
     def test_group_ref(args):
         """  test group reference doc
         """
@@ -485,22 +554,22 @@ def register_test_func():
             print("group opt 2")
         print("group ref")
 
-    @register_option("--group-opt1", action="store_true")
-    @group_main("cmd.test", entry_type=EntryType.PUBLIC)
+    @option("--group-opt1", action="store_true")
+    @group("cmd.test", as_main=True)
     def test_group_main(args):
         if args.group_opt1:
             print("group opt1")
         print("group main")
 
-    @register_option("--cmd-test-opt1", action="store_true", help="opt1")
-    @mod_ref("cmd.test")
+    @option("--cmd-test-opt1", action="store_true", help="opt1")
+    @module("cmd.test")
     def test_opt1(args):
         if args.cmd_test_opt1:
             print("cmd test opt1")
         print("cmd test mod ref")
 
-    @register_option("-v", "--verbosity", type=int, help="print information")
-    @mod_main("cmd.test", description="bbcode cmd test module")
+    @option("-v", "--verbosity", type=int, help="print information")
+    @module("cmd.test", as_main=True, description="bbcode cmd test module")
     def test_main(args):
         test_opt1(args)
         test_group_main(args)
@@ -513,8 +582,9 @@ def register_test_func():
 if __name__ == "__main__":
     register_test_func()
 
-    @register_option("-m", "--main", action="store_true")
-    @mod_main("", refs=["cmd.test"], description="bbcode main entry")
+    @option("-m", "--main", action="store_true")
+    @module("", as_main=True,
+        refs=["cmd.test", "b"], description="bbcode main entry")
     def main(args):
         print("main")
 

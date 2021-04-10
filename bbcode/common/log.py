@@ -102,13 +102,13 @@ __LOG_NAME__ = ",".join(
     ["{}({})".format(n, logging.getLevelName(l).strip()) \
     for l, n in zip(__LOG_VERBOSITY__, __LOG_IDX__)])
 
-@cmd.register_option("-v", "--verbosity",
+@cmd.option("-v", "--verbosity",
                      type=int, choices=__LOG_IDX__,
                      metavar="LEVEL", default=0,
                      help="the verbosity for log level, " +
                         "show higher level set by user, "
                         "corresponding with " + __LOG_NAME__)
-@cmd.mod_ref("log")
+@cmd.module("log")
 def Init(args):
     log_level = __LOG_VERBOSITY__[args.verbosity]
     logging.basicConfig(level=log_level)
@@ -124,7 +124,8 @@ def Init(args):
         handler.setFormatter(formatter)
 
 if __name__ == "__main__":
-    @cmd.mod_main("log", help="log test module", entry_type=cmd.EntryType.PRIVATE)
+    @cmd.module("log", as_main=True,
+        help="log test module", entry_type=cmd.EntryType.PRIVATE)
     def test_main(args):
         Init(args)
         logging.debug("test")
