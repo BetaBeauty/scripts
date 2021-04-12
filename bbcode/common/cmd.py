@@ -13,10 +13,7 @@
     Interfaces
     ==========
     @func Run: Mainly program entry function
-    @func mod_ref: Module reference function to register options,
-        which accepts the same arguments as
-        `logging.ArgumentParser.add_argument`.
-    @func mod_main: Module main entry function, the releated function
+    @func module: Module main entry function, the releated function
         will trigger after the command line set name.
 
         One notable thing to be indicated is that the dependencies
@@ -27,14 +24,18 @@
 
         @param refs: List of module string, auto combine module options
             by referece to with current module.
-    @func group_ref: Group reference function.
-    @func group_main: Group main function, which will be execute
-        multiple times if set in command line.
-    @func register_option: Wrapper function by the `add_argument` in
+    @func group: Group module wrapper function.
+    @func option: Wrapper function by the `add_argument` in
         `argparse.ArgumentParser`.
 
     Notices: The main entry must be zero or one instance, or will raise
         error.
+
+    GroupEntry
+    ==========
+    A group entry is represented as optional arguments in command line,
+    but could execute multi-group main function in single command,
+    different from the module entry.
 
     ModuleEntry
     ===========
@@ -43,12 +44,6 @@
     to the same `CmdEntry` instance. The entry will be achieved via the
     sub parsers method defined in argparse library.
 
-    GroupEntry
-    ==========
-    A group entry is represented as optional arguments in command line,
-    but could execute multi-group main function in single command,
-    different from the module entry.
-
     EntryType
     =========
     The options registered by register_option may be collected as
@@ -56,19 +51,11 @@
         etc. We'd like to support more feasible and extensible usage for
         developers, provided the problems occured in naive coding and
         reported to us.
-    TODO: Current interface introduced at last section is proved to be
-        not so practicable and available, since programmers may want to
-        collect options as cluster in one function and can control the
-        permission whether it can be access via other group or current
-        mod main. Refer to C language, we will try the same permission
-        primitive first and then update more complicated control system
-        if not satisfied.
     @PUBLIC:
-    @PROTECT:
     @PRIVATE:
 
-    >>> @register_option("-p", "--pool-size")
-    >>> @mod_ref("cmd.test", permission="PROTECT")
+    >>> @option("-p", "--pool-size")
+    >>> @module("cmd.test", permission="PRIVATE")
     >>> def cmd_test(args):
     >>>     pass
 
@@ -84,6 +71,11 @@ import json
 from enum import Enum
 
 import argparse
+
+__all__ = [
+    "PUBLIC", "PRIVATE",
+    "module", "group", "option",
+    "Run"]
 
 class CmdName:
     """ Formatted Cmder Name
@@ -150,31 +142,33 @@ class CmdName:
     def topo_sort(cmd_names : Sequence[CmdName]) -> Sequence[CmdName]:
         return sorted(cmd_names, key=lambda x : len(x.name), reverse=True)
 
-class EntryType(Enum):
-    PUBLIC = 0
-    PRIVATE = 1
-    # TODO: module options accessable to mod main, not other module
-    PROTECT = 2
+PUBLIC = 0
+PRIVATE = 1
 
 class CmdOption:
     def __init__(self, *args, **kw):
-        self.args = args
-        self.kw = kw
+        self.args = list(args)
+        self.kw = dict(kw)
+
+    def update_option(self, *args, **kw):
+        self.args.extend(args)
+        for k, v in kw.items():
+            print(k, v)
 
     def __repr__(self):
         return "<%s,%s>" % (self.args, self.kw)
 
 class GroupOption:
-    def __init__(self, entry_type : EntryType):
+    def __init__(self, permission):
         self.options : Sequence[CmdOption] = []
-        self.entry_type = entry_type
+        self.permission = permission
 
     def add_option(self, *args, **kw):
         self.options.append(CmdOption(*args, **kw))
 
     def to_string(self):
         ser = ", ".join([str(o) for o in self.options])
-        type_str = "PUBLIC" if self.entry_type == EntryType.PUBLIC else "PRIVATE"
+        type_str = "PUBLIC" if self.permission == PUBLIC else "PRIVATE"
         return "%s [%s]" % (type_str, ser)
 
 class CmdFunction:
@@ -207,11 +201,11 @@ class GroupEntry:
         self.options : Sequence[GroupOption] = []
         self.params : CmdOption = CmdOption()
         self.func : CmdFunction = CmdFunction(
-            self.group_option(EntryType.PUBLIC))
+            self.group_option(PUBLIC))
 
     def register_parser(self, *args, **kw):
-        self.params.args = args
-        self.params.kw = kw
+        self.params.args.extend(args)
+        self.params.kw.update(kw)
         return self
 
     def to_string(self, new_line = False):
@@ -224,21 +218,21 @@ class GroupEntry:
         ser += "options=[%s%s] " % (split_str, opt_str)
         return ser
 
-    def by_main_func(self, entry_type) -> CmdFunction:
-        self.func.options.entry_type = entry_type
+    def by_main_func(self, permission) -> CmdFunction:
+        self.func.options.permission = permission
         return self.func
 
-    def by_pass_func(self, entry_type) -> CmdFunction:
-        return CmdFunction(self.group_option(entry_type))
+    def by_pass_func(self, permission) -> CmdFunction:
+        return CmdFunction(self.group_option(permission))
 
-    def group_option(self, entry_type) -> GroupOption:
-        self.options.append(GroupOption(entry_type))
+    def group_option(self, permission) -> GroupOption:
+        self.options.append(GroupOption(permission))
         return self.options[-1]
 
     def public_group_entry(self) -> GroupEntry:
         gentry = GroupEntry(self.name)
         gentry.options = [opt for opt in self.options \
-            if opt.entry_type == EntryType.PUBLIC]
+            if opt.permission == PUBLIC]
         gentry.params = self.params
         gentry.func = self.func
         return gentry
@@ -257,9 +251,6 @@ class ModEntry(GroupEntry):
         ser += "groups=[%s]" % gser
         return ser
 
-    def register_parser(self, *args, refs = [], **kw) -> ModEntry:
-        return super(ModEntry, self).register_parser(*args, **kw)
-
     def group_entry(self, group_name : CmdName) -> GroupEntry:
         if group_name not in self.groups:
             self.groups[group_name] = GroupEntry(group_name)
@@ -269,7 +260,7 @@ class ModEntry(GroupEntry):
         gentry = super(ModEntry, self).public_group_entry()
 
         if not self.func.empty():
-            gopt = GroupOption(self.func.options.entry_type)
+            gopt = GroupOption(self.func.options.permission)
             gopt.add_option(
                 self.name.cmd_name,
                 action="store_true",
@@ -277,7 +268,6 @@ class ModEntry(GroupEntry):
             gentry.options.insert(0, gopt)
 
         gentry.params = copy.deepcopy(self.params)
-        gentry.params.args = list(self.params.args)
         gentry.params.args.insert(0, self.name.mod_name)
         return gentry
 
@@ -384,10 +374,8 @@ class CmdStorage:
                     title = "COMMAND",
                     description = "supportive sub commands")
 
-        parser_params = copy.deepcopy(entry.params)
-        parser_params.kw["help"] = parser_params.kw.pop("description", None)
         mod_parser = parser_object["sub_parser"].add_parser(
-            mod_name, *parser_params.args, **parser_params.kw)
+            mod_name, *entry.params.args, **entry.params.kw)
 
         CmdStorage.init_parser(mod_parser, entry)
         parser_object[mod_name] = { "parser": mod_parser, }
@@ -407,11 +395,19 @@ class CmdStorage:
         # remove unuseful module path
         for name in CmdName.topo_sort(CmdStorage.STORE.keys()):
             entry = CmdStorage.STORE[name]
+            if getattr(entry, "has_main_entry", None):
+                continue
             has_main_entry = not entry.func.empty()
             for group in entry.groups.values():
                 if not group.func.empty():
                     has_main_entry = True
-            if not has_main_entry:
+
+            if has_main_entry:
+                for mod_name in entry.name.mod_prefix_arr:
+                    if mod_name in CmdStorage.STORE:
+                        setattr(CmdStorage.get_entry(mod_name),
+                                "has_main_entry", True)
+            else:
                 del CmdStorage.STORE[name]
 
         root_parser = argparse.ArgumentParser(
@@ -477,36 +473,95 @@ def option(*args, **kw):
     return _func
 
 def module(mod_name, *args,
-        refs = [], as_main = False,
-        entry_type=EntryType.PUBLIC, **kw):
+        as_main = False, refs = [],
+        permission = PUBLIC, **kw):
+    """ Module Interface
+
+        Root Parser Params
+        ==================
+        prog - The name of the program (default: sys.argv[0])
+        usage - The string describing the program usage
+            (default: generated from arguments added to parser)
+        description - Text to display before the argument help
+            (default: none)
+        epilog - Text to display after the argument help (default: none)
+        parents - A list of ArgumentParser objects whose arguments
+            should also be included
+        formatter_class - A class for customizing the help output
+        prefix_chars - The set of characters that prefix optional
+            arguments (default: ‘-‘)
+        fromfile_prefix_chars - The set of characters that prefix
+            files from which additional arguments should be read
+            (default: None)
+        argument_default - The global default value for arguments
+            (default: None)
+        conflict_handler - The strategy for resolving conflicting
+            optionals (usually unnecessary)
+        add_help - Add a -h/--help option to the parser (default: True)
+        allow_abbrev - Allows long options to be abbreviated if
+            the abbreviation is unambiguous. (default: True)
+        exit_on_error - Determines whether or not ArgumentParser
+            exits with error info when an error occurs. (default: True)
+
+        Sub Module Params
+        =================
+        title - title for the sub-parser group in help output;
+            by default “subcommands” if description is provided,
+            otherwise uses title for positional arguments
+        description - description for the sub-parser group in help
+            output, by default None
+        prog - usage information that will be displayed with
+            sub-command help, by default the name of the program
+            and any positional arguments before the subparser argument
+        parser_class - class which will be used to create sub-parser
+            instances, by default the class of the current parser
+            (e.g. ArgumentParser)
+        action - the basic type of action to be taken when this
+            argument is encountered at the command line
+        dest - name of the attribute under which sub-command name
+            will be stored; by default None and no value is stored
+        required - Whether or not a subcommand must be provided,
+            by default False (added in 3.7)
+        help - help for sub-parser group in help output,
+            by default None
+        metavar - string presenting available sub-commands in help;
+            by default it is None and presents sub-commands in
+            form {cmd1, cmd2, ..}
+    """
+
     mod_entry = CmdStorage.get_entry(mod_name)
     mod_entry.references.update(refs)
+    mod_entry.register_parser(*args, **kw)
     if as_main:
-        mod_entry.register_parser(*args, **kw)
-        return mod_entry.by_main_func(entry_type).wrapper
-    return mod_entry.by_pass_func(entry_type).wrapper
+        return mod_entry.by_main_func(permission).wrapper
+    return mod_entry.by_pass_func(permission).wrapper
 
-def group(mod_name, group_name = None,
-          as_main = False,
-          entry_type = EntryType.PRIVATE, **kw):
+def group(mod_name,
+          as_main = False, refs = [],
+          permission = PRIVATE,
+          # group parameters
+          group_name = None, description=None):
     mod_entry = CmdStorage.get_entry(mod_name)
+    mod_entry.references.update(refs)
     def _func(func):
         gname = CmdName.from_arg_name(func.__name__)
         if group_name is not None:
             gname = CmdName(group_name)
         gentry = mod_entry.group_entry(gname)
 
-        kw.setdefault("description", func.__doc__)
-        gentry.register_parser(gentry.name.mod_name, **kw)
+        desc = description if description else func.__doc__
+        gentry.register_parser(
+            title=gentry.name.mod_name,
+            description=desc)
 
         if as_main:
-            gfunc = gentry.by_main_func(entry_type)
+            gfunc = gentry.by_main_func(permission)
             gfunc.options.add_option(
                 gentry.name.cmd_name,
                 action="store_true",
                 help="enable module " + gentry.name.mod_name)
         else:
-            gfunc = gentry.by_pass_func(entry_type)
+            gfunc = gentry.by_pass_func(permission)
         return gfunc.wrapper(func)
     return _func
 

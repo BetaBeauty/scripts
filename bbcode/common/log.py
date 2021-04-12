@@ -115,7 +115,7 @@ if __name__ == "__main__":
     from . import cmd
 
     @cmd.module("log", as_main=True,
-        help="log test module", entry_type=cmd.EntryType.PRIVATE)
+        help="log test module", permission=cmd.PRIVATE)
     def test_main(args):
         Init(args)
         logging.debug("test")
