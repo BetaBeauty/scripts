@@ -36,7 +36,7 @@ def common_opt(args, bin_path):
                 "10.2.1.0-10.2.20.0/24")
 @cmd.module("n2n.super", as_main=True,
             refs=["n2n.common", "n2n.node.common"],
-           description="super node execution command")
+            help="super node execution command")
 def super(args):
     build_dir = path.join(git.GIT_ROOT, N2N_NAME, BUILD_DIR)
     bin_path = "" if args.system else build_dir
@@ -58,7 +58,7 @@ def super(args):
             help="n2n ip address, dhcp by default")
 @cmd.module("n2n.edge", as_main=True,
             refs=["n2n.common", "n2n.node.common"],
-           description="edge node execution command")
+            help="edge node execution command")
 def edge(args):
     build_dir = path.join(git.GIT_ROOT, N2N_NAME, BUILD_DIR)
     bin_path = "" if args.system else build_dir

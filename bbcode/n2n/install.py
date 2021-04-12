@@ -58,7 +58,7 @@ def remove_conf(args):
     base.shell_exec(RM)
 
 @cmd.module("n2n.install", refs=["n2n.common"], as_main=True,
-            description="n2n install sub command")
+            help="n2n install sub command")
 def install(args):
     download(args)
 

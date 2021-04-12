@@ -5,7 +5,7 @@ from bbcode.common import base, cmd
 @cmd.option("--ip", default="localhost",
             help="listen node IP address")
 @cmd.module("n2n.status", as_main=True,
-            description="n2n node status command")
+            help="n2n node status command")
 def status(args):
     COM = ["netcat", "-u", args.ip, args.port]
     base.shell_exec(COM)
