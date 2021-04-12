@@ -17,6 +17,7 @@ def wait_or_exit(timeout):
     event = Event()
     __QUIT_EVENTS__.append(event)
     event.wait(timeout)
+    __QUIT_EVENTS__.remove(event)
 
     if event.is_set():
         os.sys.exit()
