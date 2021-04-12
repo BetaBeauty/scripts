@@ -202,9 +202,8 @@ class CmdFunction:
         return self.func is None
 
 class GroupEntry:
-    def __init__(self, name : CmdName):
-        assert isinstance(name, CmdName)
-        self.name : CmdName = name
+    def __init__(self, name):
+        self.name = name
         self.options : Sequence[GroupOption] = []
         self.params : CmdOption = CmdOption()
         self.func : CmdFunction = CmdFunction(
@@ -248,7 +247,7 @@ class ModEntry(GroupEntry):
     def __init__(self, name : CmdName):
         super(ModEntry, self).__init__(name)
         self.references : Set[str] = set()
-        self.groups : Dict[CmdName, GroupEntry] = {}
+        self.groups : Dict[str, GroupEntry] = {}
 
     def to_string(self, new_line = True):
         split_str = "\n\t" if new_line else " "
@@ -261,7 +260,7 @@ class ModEntry(GroupEntry):
     def register_parser(self, *args, refs = [], **kw) -> ModEntry:
         return super(ModEntry, self).register_parser(*args, **kw)
 
-    def group_entry(self, group_name : str) -> GroupEntry:
+    def group_entry(self, group_name : CmdName) -> GroupEntry:
         if group_name not in self.groups:
             self.groups[group_name] = GroupEntry(group_name)
         return self.groups[group_name]
@@ -383,10 +382,13 @@ class CmdStorage:
             parser_object["sub_parser"] = \
                 parser_object["parser"].add_subparsers(
                     title = "COMMAND",
-                    description = "collective sub commands")
+                    description = "supportive sub commands")
 
+        parser_params = copy.deepcopy(entry.params)
+        parser_params.kw["help"] = parser_params.kw.pop("description", None)
         mod_parser = parser_object["sub_parser"].add_parser(
-            mod_name, *entry.params.args, **entry.params.kw)
+            mod_name, *parser_params.args, **parser_params.kw)
+
         CmdStorage.init_parser(mod_parser, entry)
         parser_object[mod_name] = { "parser": mod_parser, }
         return mod_parser
@@ -485,18 +487,17 @@ def module(mod_name, *args,
     return mod_entry.by_pass_func(entry_type).wrapper
 
 def group(mod_name, group_name = None,
-          as_main = False, desc = None,
-          entry_type = EntryType.PRIVATE):
+          as_main = False,
+          entry_type = EntryType.PRIVATE, **kw):
     mod_entry = CmdStorage.get_entry(mod_name)
     def _func(func):
-        gname = group_name
-        if gname is None:
-            gname = CmdName.from_arg_name(func.__name__)
+        gname = CmdName.from_arg_name(func.__name__)
+        if group_name is not None:
+            gname = CmdName(group_name)
         gentry = mod_entry.group_entry(gname)
 
-        description = func.__doc__ if desc is None else desc
-        gentry.register_parser(gentry.name.mod_name,
-                               description=description)
+        kw.setdefault("description", func.__doc__)
+        gentry.register_parser(gentry.name.mod_name, **kw)
 
         if as_main:
             gfunc = gentry.by_main_func(entry_type)
@@ -505,7 +506,7 @@ def group(mod_name, group_name = None,
                 action="store_true",
                 help="enable module " + gentry.name.mod_name)
         else:
-            gfunc = mod_entry.by_pass_func(entry_type)
+            gfunc = gentry.by_pass_func(entry_type)
         return gfunc.wrapper(func)
     return _func
 

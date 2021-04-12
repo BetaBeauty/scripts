@@ -1,4 +1,4 @@
 unix/
 
-.tmp/
+.git_root/
 *__pycache__*
