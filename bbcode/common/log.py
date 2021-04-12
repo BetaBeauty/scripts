@@ -1,8 +1,6 @@
 from datetime import datetime
 from typing import List
 
-from . import cmd
-
 import logging
 
 class ColorFormatter(logging.Formatter):
@@ -96,21 +94,11 @@ logging.addLevelName(WARN,  " WARN")
 logging.addLevelName(ERROR, "ERROR")
 logging.addLevelName(FATAL, "FATAL")
 
-__LOG_VERBOSITY__ = [TRACE, DEBUG, INFO, WARN, ERROR, FATAL]
-__LOG_IDX__ = list(range(len(__LOG_VERBOSITY__)))
-__LOG_NAME__ = ",".join(
-    ["{}({})".format(n, logging.getLevelName(l).strip()) \
-    for l, n in zip(__LOG_VERBOSITY__, __LOG_IDX__)])
+LOG_LEVELS = [TRACE, DEBUG, INFO, WARN, ERROR, FATAL]
+LOG_NAMES = [logging.getLevelName(l).strip() for l in LOG_LEVELS]
 
-@cmd.option("-v", "--verbosity",
-                     type=int, choices=__LOG_IDX__,
-                     metavar="LEVEL", default=0,
-                     help="the verbosity for log level, " +
-                        "show higher level set by user, "
-                        "corresponding with " + __LOG_NAME__)
-@cmd.module("log")
-def Init(args):
-    log_level = __LOG_VERBOSITY__[args.verbosity]
+def Init(log_level):
+    assert log_level in LOG_LEVELS
     logging.basicConfig(level=log_level)
     formatter = ColorFormatter(
             fmt="[ %(asctime)s %(name)10s %(levelname)s ] %(message)s",
@@ -124,6 +112,8 @@ def Init(args):
         handler.setFormatter(formatter)
 
 if __name__ == "__main__":
+    from . import cmd
+
     @cmd.module("log", as_main=True,
         help="log test module", entry_type=cmd.EntryType.PRIVATE)
     def test_main(args):

@@ -4,7 +4,7 @@ import logging
 import signal
 from threading import Event, Thread
 
-_QUIT_EVENT_ = Event()
+__QUIT_EVENTS__ = []
 
 def as_thread_func(func):
     def _container(*args, **kwargs):
@@ -14,9 +14,11 @@ def as_thread_func(func):
     return _container
 
 def wait_or_exit(timeout):
-    _QUIT_EVENT_.wait(timeout)
+    event = Event()
+    __QUIT_EVENTS__.append(event)
+    event.wait(timeout)
 
-    if _QUIT_EVENT_.is_set():
+    if event.is_set():
         os.sys.exit()
 
 # service module
@@ -54,20 +56,24 @@ def register_stop_handler(name):
         return func
     return _func
 
-def _stop_service(signo=2, _frame=None):
-    print("\n\n")
-    logger.info("shutting down ...")
-    _QUIT_EVENT_.set()
+def auto_close():
+    def _shut_down(signo=2, _frame=None):
+        print("\n")
+        logger.info("shutting down ...")
+        for event in __QUIT_EVENTS__:
+            event.set()
 
-    for name, func in __REGISTER_SERVICES__.items():
-        logger.info("stop service - {}".format(name))
-        func.stop()
+        for name, func in __REGISTER_SERVICES__.items():
+            logger.info("stop service - {}".format(name))
+            func.stop()
 
-def Run(*args, **kw):
     for sig in ('TERM', 'HUP', 'INT'):
         signal.signal(
             getattr(signal, 'SIG'+sig),
-            _stop_service);
+            _shut_down);
+
+def Run(*args, **kw):
+    auto_close()
 
     for name, func in __REGISTER_SERVICES__.items():
         logger.info("start service - {}".format(name))
