@@ -13,7 +13,9 @@ from .base import *
             help="print more node information")
 @cmd.option("--usage", action="store_true",
             help="print node usage")
-@cmd.module("n2n.node.common")
+@cmd.module("n2n.node.common",
+            description="n2n node common",
+            help="n2n node common")
 def common_opt(args, bin_path):
     if args.usage:
         USAGE = [bin_path, "--help"]

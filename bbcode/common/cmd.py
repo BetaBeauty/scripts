@@ -269,6 +269,8 @@ class ModEntry(GroupEntry):
 
         gentry.params = copy.deepcopy(self.params)
         gentry.params.args.insert(0, self.name.mod_name)
+        # group has no help option
+        gentry.params.kw.pop("help", None)
         return gentry
 
 class CmdStorage:
