@@ -15,18 +15,22 @@ from .base import *
 
 logger = logging.getLogger("ssh.proxy")
 
-@cmd.option("--local",
+SSH_PKEY_FILE = path.join(DEFAULT_SSH_DIRECTORY, "id_rsa")
+
+@cmd.option("--local", required=True,
             action="append", default=[],
             help="local binding[listen] address, host[:port]")
-@cmd.option("--remote",
+@cmd.option("--remote", required=True,
             action="append", default=[],
             help="remote listen[binding] address, host[:port]")
 @cmd.option("--password", default=None,
             help="server password, this will be prompt if not set")
+@cmd.option("--key-file", metavar="FILE",
+            default=SSH_PKEY_FILE,
+            help="rsa private key, by default load path: ~/.ssh/id_rsa")
 @cmd.option("server",
             help="ssh server address, [user@]hostname[:port]")
 @cmd.module("ssh.tunnel", as_main=True,
-            refs=["ssh.key"],
             help="ssh tunnel tools",
             description="""
 SSH Tunnel Tools

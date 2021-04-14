@@ -1,8 +1,7 @@
 from bbcode.common import cmd
 
 from . import key
-from . import proxy
-from . import local
+from . import tunnel, reverse_tunnel
 
 cmd.module(
     "ssh",

@@ -21,14 +21,23 @@ import paramiko
 from bbcode.common import types
 from bbcode.common import cmd, log, thread
 
-from . import key
+from .config import ssh_config
 from .base import *
 
 logger = logging.getLogger("ssh.tunnel.reverse")
 
 def ssh_transport(server, key_file, password):
-    user, srv = parse_user(server)
-    srv = parse_url(srv, 22)
+    user, server = parse_user(server)
+    server = list(parse_url(server, 22))
+    (server[0],
+     user,
+     key_file,
+     port
+    ) = ssh_config(server[0],
+               username = user,
+               private_key = key_file,
+               port = server[1])
+
     client = paramiko.SSHClient()
     client.load_system_host_keys()
     params = { "username": user if user else getpass.getuser(), }
@@ -44,9 +53,9 @@ def ssh_transport(server, key_file, password):
             prompt="Please enter password for server:{}".format(server))
 
     try:
-        client.connect(*srv, **params)
+        client.connect(*server, **params)
     except Exception as e:
-        logger.error("Failed to connect to %s:%d - %r" % (*srv, e))
+        logger.error("Failed to connect to %s:%d - %r" % (*server, e))
         raise e
         return None
 
@@ -107,7 +116,7 @@ def handler(chan, local_address, info):
     logger.debug("Tunnel closed for %s" % info)
 
 @cmd.group("ssh.tunnel", as_main=True,
-            description="""
+           description="""
   Reverse tunnel Group
 
   User may want to export some local
@@ -161,7 +170,6 @@ def reverse_tunnel(args):
 
         for channel in chan_to_rm:
             channel.close()
-
 
     thread.Run()
 

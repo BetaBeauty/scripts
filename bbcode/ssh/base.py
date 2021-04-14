@@ -1,3 +1,6 @@
+from os import path
+
+DEFAULT_SSH_DIRECTORY = path.expanduser("~/.ssh")
 
 def parse_user(server):
     args = ([None] + server.split("@"))[-2:]
