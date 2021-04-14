@@ -128,7 +128,7 @@ class CmdName:
 
     @property
     def mod_name(self):
-        return self.name.replace(".", "-")
+        return self.name.replace(".", " ")
 
     @property
     def cmd_name(self):
@@ -376,6 +376,11 @@ class CmdStorage:
                     title = "COMMAND",
                     description = "supportive sub commands")
 
+
+        entry.params.kw.setdefault(
+            "formatter_class",
+            argparse.RawDescriptionHelpFormatter)
+
         mod_parser = parser_object["sub_parser"].add_parser(
             mod_name, *entry.params.args, **entry.params.kw)
 
@@ -385,11 +390,6 @@ class CmdStorage:
 
     @staticmethod
     def init_parsers() -> argparse.ArgumentParser:
-        # init root parser descriptions
-        root_entry = ModEntry(CmdName(""))
-        root_entry.register_parser(
-            description="bbcode helper script, implemented via python3")
-        root_entry = CmdStorage.get_entry("", default=root_entry)
 
         for entry in list(CmdStorage.STORE.values()):
             CmdStorage.refer_analysis(entry)
@@ -411,6 +411,15 @@ class CmdStorage:
                                 "has_main_entry", True)
             else:
                 del CmdStorage.STORE[name]
+
+        # init root parser descriptions
+        root_entry = CmdStorage.get_entry("")
+        root_entry.params.kw.setdefault(
+            "description",
+            "bbcode helper script, implemented via python3")
+        root_entry.params.kw.setdefault(
+            "formatter_class",
+            argparse.RawDescriptionHelpFormatter)
 
         root_parser = argparse.ArgumentParser(
             *root_entry.params.args, **root_entry.params.kw)

@@ -17,17 +17,32 @@ logger = logging.getLogger("ssh.proxy")
 
 @cmd.option("--local",
             action="append", default=[],
-            )
+            help="local binding[listen] address, host[:port]")
 @cmd.option("--remote",
             action="append", default=[],
-            help="server remote bind address: host[:port]")
+            help="remote listen[binding] address, host[:port]")
 @cmd.option("--password", default=None,
             help="server password, this will be prompt if not set")
 @cmd.option("server",
-            help="ssh server, format: [user@]hostname[:port]")
+            help="ssh server address, [user@]hostname[:port]")
 @cmd.module("ssh.tunnel", as_main=True,
             refs=["ssh.key"],
-            help="[reverse] proxy for machines")
+            help="ssh tunnel tools",
+            description="""
+SSH Tunnel Tools
+
+  By default use formal direction, that is user
+    can connect a port of a remote server where only SSH is reachable,
+    or want to connect a private server which is ont directly visible
+    from the outside:
+
+    port forwarding map:
+        local(bind) <- 127.0.0.1 <- server <- remote(listen)
+    data flow:
+        user -> local -> 127.0.0.1 -> server -> remote
+
+  And for reverse tunnel, refers to the group option: --reverse
+""")
 def tunnel(args):
     user, server = parse_user(args.server)
     server = parse_url(server, 22)
@@ -64,22 +79,3 @@ def tunnel(args):
         server.close()
 
     thread.Run()
-
-@cmd.group("ssh.tunnel", as_main=True, permission=cmd.PRIVATE)
-def test_socket(args):
-    import requests
-
-    transport = paramiko.Transport(("101.200.44.74", 22))
-    class Handler(sshtunnel._ForwardHandler):
-        remote_address = ("101.200.44.74", 8829)
-        ssh_transport = transport
-    # server = socketserver.TCPServer(
-        # # ("127.0.0.1", 22),
-        # ("0.0.0.0", 22),
-        # Handler)
-    sess = requests.session()
-
-    socketserver.UDPServer(
-        # ("127.0.0.1", 22),
-        ("0.0.0.0", 22),
-        Handler)

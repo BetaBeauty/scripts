@@ -14,15 +14,17 @@ import socket
 import getpass
 import select
 import logging
+import threading
 
 import paramiko
 
-from bbcode.common import cmd, log
+from bbcode.common import types
+from bbcode.common import cmd, log, thread
 
 from . import key
 from .base import *
 
-logger = logging.getLogger("ssh.map")
+logger = logging.getLogger("ssh.tunnel.reverse")
 
 def ssh_transport(server, key_file, password):
     user, srv = parse_user(server)
@@ -41,8 +43,6 @@ def ssh_transport(server, key_file, password):
         params["password"] = getpass.getpass(
             prompt="Please enter password for server:{}".format(server))
 
-    print(params)
-
     try:
         client.connect(*srv, **params)
     except Exception as e:
@@ -52,107 +52,116 @@ def ssh_transport(server, key_file, password):
 
     return client.get_transport()
 
-class LocalServer:
-    def __init__(self, address, key_file, password):
-        self._user, server = parse_user(address)
-        self._server = parse_url(server, 22)
+__CHANNELS__ = []
+__LOCK__ = threading.Lock()
 
-        self._connected = False
-        self._sock = None
-        if self.is_native():
-            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._sock.connect(("localhost", 22))
-            self._connected = True
-        else:
-            self._ts = ssh_transport(
-                "{}@{}:{}".format(self._user, self._server[0], 22),
-                key_file, password)
-            if self._ts:
-                srv_address = (socket.gethostname(), 12345)
-                self._sock = self._ts.open_channel(
-                    kind="direct-tcpip",
-                    dest_addr=self._serevr,
-                    src_addr=srv_address,
-                    timeout=10.0)
-                self._connected = True
+def handler(chan, local_address, info):
+    sock = socket.socket()
+    try:
+        sock.connect(local_address)
+    except Exception as e:
+        logger.error("Forwarding request to %s:%d failed - %r" % (
+            *local_address, e))
+        return
 
-    def connected(self):
-        return self._connected
+    __CHANNELS__.append(sock)
 
-    def get_channel(self):
-        return self._sock
+    logger.debug("Connected! Reverse Tunnel open %s" % info)
 
-    def sendall(self, data):
-        self._sock.sendall(data)
+    while chan.active:
+        rqst, _, _ = select.select([chan, sock], [], [], 5)
 
-    def is_native(self):
-        return self._server[0] in [
-            "localhost", "0.0.0.0", "127.0.0.1", "*"]
-
-
-def communicate(local, remote, info):
-    while remote.active:
-        rqst, _, _ = select.select([local, remote], [], [], 5)
-
-        if remote in rqst:
-            data = remote.recv(1024)
+        if chan in rqst:
+            data = chan.recv(1024)
             if not data:
                 logger.log(log.TRACE,
-                    "server {} send empty data".format(info))
+                    "remote {} send empty data".format(info))
                 break
             logger.log(log.TRACE,
-                "<<< IN {} recv: {} <<<".format(info, data))
-            local.sendall(data)
+                "<<< IN {} recv: {} <<<".format(
+                    info, types.bytes2hex(data)))
+            sock.sendall(data)
 
-        if local in rqst:
-            data = local.recv(1024)
+        if sock in rqst:
+            data = sock.recv(1024)
             if not data:
                 logger.log(
                     log.TRACE,
-                    "local {} send empty data".format(args.local))
+                    "local {} send empty data".format(info))
                 break
             logger.log(
                 log.TRACE,
-                ">>> OUT {} send: {} >>>".format(info, data))
-            remote.sendall(data)
+                ">>> OUT {} send: {} >>>".format(
+                    info, types.bytes2hex(data)))
+            chan.sendall(data)
 
-@cmd.option("--remote", default="0.0.0.0:22",
-            help="server listen address, format: host[:port]")
-@cmd.option("--local", default="0.0.0.0:22",
-            help="local accessable, format: [user:]host[:port]")
-@cmd.option("--password", default=None,
-            help="server password, this will be prompt if not set")
-@cmd.option("server",
-            help="ssh server, format: [user:]hostname[:port]")
-@cmd.module("ssh.map", as_main=True,
-            refs=["ssh.key"],
-            help="ssh single direction port map")
-def ssh_map(args):
+    __LOCK__.acquire()
+    if chan in __CHANNELS__:
+        __CHANNELS__.remove(chan)
+        chan.close()
+    if sock in __CHANNELS__:
+        __CHANNELS__.remove(sock)
+        sock.close()
+    __LOCK__.release()
+
+    logger.debug("Tunnel closed for %s" % info)
+
+@cmd.group("ssh.tunnel", as_main=True,
+            description="""
+  Reverse tunnel Group
+
+  User may want to export some local
+    address's ports into global internet in some specific
+    scenarios, like do reverse tunnel port mapping so that
+    developers can access company machines at home as an VPN
+    does, but this is somehow a light solution for programmers:
+
+    port forwarding map:
+        local(listen) -> 127.0.0.1 -> server -> remote(bind)
+    data flow:
+        local <- 127.0.0.1 <- server <- remote <- user
+""")
+def reverse_tunnel(args):
     server_ts = ssh_transport(args.server, args.key_file, args.password)
-    local = LocalServer(args.local, args.key_file, args.password)
-    if not server_ts or not local.connected():
+    if not server_ts:
         return
 
-    remote_address = parse_url(args.remote, 22)
-    user, srv = parse_user(args.server)
-    srv = parse_url(srv, 22)
-    srv_chan = server_ts.open_channel(
-        kind="direct-tcpip",
-        dest_addr=remote_address,
-        src_addr=srv,
-        timeout=10.0)
+    los = [parse_url(l, 22) for l in args.local]
+    res = [parse_url(r, 22) for r in args.remote]
 
-    local_chan = local.get_channel()
-    info = '{} - {} - {}'.format(
-        args.local, args.server, args.remote)
+    for remote_address in res:
+        server_ts.request_port_forward(*remote_address)
 
-    try:
-        communicate(local_chan, srv_chan, info)
-    except Exception as e:
-        logger.error("{} interuppt - {}".format(info, e))
-    finally:
-        local_chan.close()
-        srv_chan.close()
-        logger.info("{} connection closed".format(info))
+    @thread.register_service("ssh.tunnel.reverse")
+    def start_reverse_tunnel():
+        while server_ts.active:
+            server_chan = server_ts.accept(10)
+            if server_chan is None:
+                continue
 
-    print("done!!!")
+            __CHANNELS__.append(server_chan)
+
+            for local_addr in los:
+                info = "%s:%s - %s" % (*local_addr, args.server)
+                thread.as_thread_func(handler)(
+                    server_chan, local_addr, info)
+
+    @thread.register_stop_handler("ssh.tunnel.reverse")
+    def stop_tunnel_reverse():
+        for remote_address in res:
+            server_ts.cancel_port_forward(*remote_address)
+
+        server_ts.close()
+        server_ts._queue_incoming_channel(None)
+
+        __LOCK__.acquire()
+        chan_to_rm = list(__CHANNELS__)
+        __CHANNELS__.clear()
+        __LOCK__.release()
+
+        for channel in chan_to_rm:
+            channel.close()
+
+
+    thread.Run()
+
