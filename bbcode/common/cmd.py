@@ -377,8 +377,8 @@ class CmdStorage:
                 try:
                     parser.add_argument(*opt.args, **opt.kw)
                 except argparse.ArgumentError as e:
-                    logger.error("module({}):group({}): {}".format(
-                        entry.name, group.name, e))
+                    logger.error("module({}): {}".format(
+                        entry.name, e))
                     raise e
 
         def _func(args):
@@ -386,7 +386,6 @@ class CmdStorage:
             if not pre_func.empty():
                 pre_func(args)
 
-            logger.info("run group function")
             for group in entry.groups.values():
                 if group.func.empty():
                     continue
@@ -403,6 +402,8 @@ class CmdStorage:
 
     @staticmethod
     def init_parser_object(parser_object, mod_name, entry, pre_func):
+        logger = logging.getLogger("cmd.parser")
+
         if "sub_parser" not in parser_object:
             parser_object["sub_parser"] = \
                 parser_object["parser"].add_subparsers(
@@ -414,8 +415,13 @@ class CmdStorage:
             "formatter_class",
             argparse.RawDescriptionHelpFormatter)
 
-        mod_parser = parser_object["sub_parser"].add_parser(
-            mod_name, *entry.params.args, **entry.params.kw)
+        try:
+            mod_parser = parser_object["sub_parser"].add_parser(
+                mod_name, *entry.params.args, **entry.params.kw)
+        except Exception as e:
+            logger.error("module({}): {}".format(
+                entry.name, e))
+            raise e
 
         CmdStorage.init_parser(mod_parser, entry, pre_func)
         parser_object[mod_name] = { "parser": mod_parser, }
@@ -460,8 +466,15 @@ class CmdStorage:
             argparse.RawDescriptionHelpFormatter)
         root_entry.update_groups(pre_groups)
 
-        root_parser = argparse.ArgumentParser(
-            *root_entry.params.args, **root_entry.params.kw)
+        logger = logging.getLogger("cmd.parser")
+        try:
+            root_parser = argparse.ArgumentParser(
+                *root_entry.params.args, **root_entry.params.kw)
+        except Exception as e:
+            logger.error("module({}): {}".format(
+                root_entry.name, e))
+            raise e
+
         CmdStorage.init_parser(root_parser, root_entry, pre_func)
 
         # set root parser object
@@ -632,72 +645,3 @@ def Run():
         "cannot find the mainly function to run, " +
         "please set main function via mod_main or group_main."
     )
-
-""" CMD Test Code and Command Line
-"""
-def register_test_func():
-    @option("--opt-a", help="opt a")
-    @module("a", refs=["b"])
-    def mod_a(args):
-        print("a")
-
-    @option("--opt-b", help="opt b")
-    @module("b", as_main=True, refs=["c"])
-    def mod_b(args):
-        print("b")
-
-    @option("--opt-c", help="opt c")
-    @module("c", refs=["a"])
-    def mod_c(args):
-        print("c")
-
-    @option("--opt-d", help="opt d")
-    @module("d")
-    def mod_d(args):
-        print("d")
-
-    @option("--group-opt2", action="store_true")
-    @module("log", as_main=True, refs=["c"])
-    def test_group_ref(args):
-        """  test group reference doc
-        """
-        if args.group_opt2:
-            print("group opt 2")
-        print("group ref")
-
-    @option("--group-opt1", action="store_true")
-    @group("cmd.test", as_main=True)
-    def test_group_main(args):
-        if args.group_opt1:
-            print("group opt1")
-        print("group main")
-
-    @option("--cmd-test-opt1", action="store_true", help="opt1")
-    @module("cmd.test")
-    def test_opt1(args):
-        if args.cmd_test_opt1:
-            print("cmd test opt1")
-        print("cmd test mod ref")
-
-    @option("-v", "--verbosity", type=int, help="print information")
-    @module("cmd.test", as_main=True, description="bbcode cmd test module")
-    def test_main(args):
-        test_opt1(args)
-        test_group_main(args)
-        test_group_ref(args)
-        if args.verbosity:
-            print("verbosity output")
-        else:
-            print("naive output")
-
-if __name__ == "__main__":
-    register_test_func()
-
-    @option("-m", "--main", action="store_true")
-    @module("", as_main=True,
-        refs=["cmd.test", "b"], description="bbcode main entry")
-    def main(args):
-        print("main")
-
-    Run()
-
