@@ -144,7 +144,7 @@ def reverse_tunnel(args):
     @thread.register_service("ssh.tunnel.reverse")
     def start_reverse_tunnel():
         while server_ts.active:
-            server_chan = server_ts.accept(10)
+            server_chan = server_ts.accept(timeout=10)
             if server_chan is None:
                 continue
 
@@ -161,6 +161,7 @@ def reverse_tunnel(args):
             server_ts.cancel_port_forward(*remote_address)
 
         server_ts.close()
+        # hook method for quick stop the `server_ts.accept`
         server_ts._queue_incoming_channel(None)
 
         __LOCK__.acquire()
@@ -170,6 +171,4 @@ def reverse_tunnel(args):
 
         for channel in chan_to_rm:
             channel.close()
-
-    thread.Run()
 

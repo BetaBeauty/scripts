@@ -68,6 +68,7 @@ from typing import Callable
 
 import copy
 import json
+import logging
 from enum import Enum
 
 import argparse
@@ -150,11 +151,6 @@ class CmdOption:
         self.args = list(args)
         self.kw = dict(kw)
 
-    def update_option(self, *args, **kw):
-        self.args.extend(args)
-        for k, v in kw.items():
-            print(k, v)
-
     def __repr__(self):
         return "<%s,%s>" % (self.args, self.kw)
 
@@ -192,11 +188,17 @@ class CmdFunction:
         self.func = func
         return self
 
+    def move(self) -> CmdFunction:
+        move_func = CmdFunction(self.options)
+        move_func.func = self.func
+        self.func = None
+        return move_func
+
     def empty(self) -> bool:
         return self.func is None
 
 class GroupEntry:
-    def __init__(self, name):
+    def __init__(self, name : CmdName):
         self.name = name
         self.options : Sequence[GroupOption] = []
         self.params : CmdOption = CmdOption()
@@ -273,9 +275,21 @@ class ModEntry(GroupEntry):
         gentry.params.kw.pop("help", None)
         return gentry
 
+    def as_groups(self):
+        common_groups = { self.name: self.public_group_entry() }
+        for k, v in self.groups.items():
+            common_groups[k] = v.public_group_entry()
+        return common_groups
+
+    def update_groups(self, common_groups):
+        for k, v in common_groups.items():
+            if k not in self.groups:
+                self.groups[k] = v
+
 class CmdStorage:
     STORE : Dict[CmdName, ModEntry] = {}
     PARSERS = {}
+    GLOBAL_NAME = "global.options"
 
     @staticmethod
     def get_entry(mod_name, default = None) -> ModEntry:
@@ -305,17 +319,13 @@ class CmdStorage:
                 ref_entry = CmdStorage.get_entry(ref_name)
                 # TODO: may cause undeterministic behavior, since
                 #   group names may be duplicated.
-                common_groups[ref_name] = ref_entry.public_group_entry()
-                for k, v in ref_entry.groups.items():
-                    common_groups[k] = v.public_group_entry()
+                common_groups.update(ref_entry.as_groups())
 
             for idx, ref_name in enumerate(ref_path[start:-1]):
                 ref_entry = CmdStorage.get_entry(ref_name)
                 # remove dependency reference in ref_path
                 ref_entry.references.remove(ref_path[start+idx+1])
-                for k, v in common_groups.items():
-                    if k not in ref_entry.groups:
-                        ref_entry.groups[k] = v
+                ref_entry.update_groups(common_groups)
 
             ref_path.pop(-1)
 
@@ -341,19 +351,42 @@ class CmdStorage:
         ref_path.remove(entry.name)
 
     @staticmethod
-    def init_parser(parser : argparse.ArgumentParser, entry : ModEntry):
+    def init_parser(parser : argparse.ArgumentParser,
+                    entry : ModEntry,
+                    pre_func):
+        logger = logging.getLogger("cmd.parser")
         for group in entry.groups.values():
-            gparser = parser.add_argument_group(
-                *group.params.args, **group.params.kw)
+            try:
+                gparser = parser.add_argument_group(
+                    *group.params.args, **group.params.kw)
+            except Exception as e:
+                logger.error("module({}):group({}): {}".format(
+                    entry.name, group.name, e))
+                raise e
             for gopt in group.options:
                 for opt in gopt.options:
-                    gparser.add_argument(*opt.args, **opt.kw)
+                    try:
+                        gparser.add_argument(*opt.args, **opt.kw)
+                    except argparse.ArgumentError as e:
+                        logger.error("module({}):group({}): {}".format(
+                            entry.name, group.name, e))
+                        raise e
 
         for gopt in entry.options:
             for opt in gopt.options:
-                parser.add_argument(*opt.args, **opt.kw)
+                try:
+                    parser.add_argument(*opt.args, **opt.kw)
+                except argparse.ArgumentError as e:
+                    logger.error("module({}):group({}): {}".format(
+                        entry.name, group.name, e))
+                    raise e
 
         def _func(args):
+            # invoke prepare function
+            if not pre_func.empty():
+                pre_func(args)
+
+            logger.info("run group function")
             for group in entry.groups.values():
                 if group.func.empty():
                     continue
@@ -369,7 +402,7 @@ class CmdStorage:
         parser.set_defaults(func=_func)
 
     @staticmethod
-    def init_parser_object(parser_object, mod_name, entry):
+    def init_parser_object(parser_object, mod_name, entry, pre_func):
         if "sub_parser" not in parser_object:
             parser_object["sub_parser"] = \
                 parser_object["parser"].add_subparsers(
@@ -384,7 +417,7 @@ class CmdStorage:
         mod_parser = parser_object["sub_parser"].add_parser(
             mod_name, *entry.params.args, **entry.params.kw)
 
-        CmdStorage.init_parser(mod_parser, entry)
+        CmdStorage.init_parser(mod_parser, entry, pre_func)
         parser_object[mod_name] = { "parser": mod_parser, }
         return mod_parser
 
@@ -393,6 +426,11 @@ class CmdStorage:
 
         for entry in list(CmdStorage.STORE.values()):
             CmdStorage.refer_analysis(entry)
+
+        pre_entry = CmdStorage.get_entry(CmdStorage.GLOBAL_NAME)
+        CmdStorage.STORE.pop(CmdStorage.GLOBAL_NAME)
+        pre_func = pre_entry.func.move()
+        pre_groups = pre_entry.as_groups()
 
         # remove unuseful module path
         for name in CmdName.topo_sort(CmdStorage.STORE.keys()):
@@ -420,10 +458,11 @@ class CmdStorage:
         root_entry.params.kw.setdefault(
             "formatter_class",
             argparse.RawDescriptionHelpFormatter)
+        root_entry.update_groups(pre_groups)
 
         root_parser = argparse.ArgumentParser(
             *root_entry.params.args, **root_entry.params.kw)
-        CmdStorage.init_parser(root_parser, root_entry)
+        CmdStorage.init_parser(root_parser, root_entry, pre_func)
 
         # set root parser object
         CmdStorage.PARSERS["parser"] = root_parser
@@ -434,8 +473,10 @@ class CmdStorage:
                     entry.name.mod_array, entry.name.mod_prefix_arr):
                 if mod_name not in parser_object:
                     mod_entry = CmdStorage.get_entry(prefix)
+                    mod_entry.update_groups(pre_groups)
                     CmdStorage.init_parser_object(
-                        parser_object, mod_name, mod_entry)
+                        parser_object, mod_name,
+                        mod_entry, pre_func)
                 parser_object = parser_object[mod_name]
         return root_parser
 
@@ -576,13 +617,16 @@ def group(mod_name,
         return gfunc.wrapper(func)
     return _func
 
+def prepare(refs=[]):
+    return module(CmdStorage.GLOBAL_NAME, refs=refs, as_main=True)
+
 def Run():
     root_parser = CmdStorage.init_parsers()
     args = root_parser.parse_args()
 
     if getattr(args, "func", None):
         args.func(args)
-        exit(0)
+        return
 
     raise RuntimeError(
         "cannot find the mainly function to run, " +

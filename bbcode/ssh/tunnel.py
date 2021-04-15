@@ -81,5 +81,3 @@ def tunnel(args):
     @thread.register_stop_handler("ssh tunnel")
     def stop():
         server.close()
-
-    thread.Run()

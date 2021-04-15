@@ -9,7 +9,7 @@ from .base import *
 @cmd.option("--mana-port", default=None,
             type=int, metavar="PORT",
             help="super/edge node manage port, 5645/5644 by default")
-@cmd.option("-v", "--verbosity", action="store_true",
+@cmd.option("--debug", action="store_true",
             help="print more node information")
 @cmd.option("--usage", action="store_true",
             help="print node usage")
@@ -27,7 +27,7 @@ def common_opt(args, bin_path):
         RUN.extend(["-t", args.mana_port])
     if args.port:
         RUN.extend(["-p", args.port])
-    if args.verbosity:
+    if args.debug:
         RUN.append("-v")
     return RUN
 

@@ -97,6 +97,14 @@ logging.addLevelName(FATAL, "FATAL")
 LOG_LEVELS = [TRACE, DEBUG, INFO, WARN, ERROR, FATAL]
 LOG_NAMES = [logging.getLevelName(l).strip() for l in LOG_LEVELS]
 
+def level2name(log_level):
+    assert log_level in LOG_LEVELS
+    return LOG_NAMES[LOG_LEVELS.index(log_level)]
+
+def name2level(log_name):
+    assert log_name in LOG_NAMES
+    return LOG_LEVELS[LOG_NAMES.index(log_name)]
+
 def Init(log_level):
     assert log_level in LOG_LEVELS
     logging.basicConfig(level=log_level)
