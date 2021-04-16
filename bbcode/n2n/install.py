@@ -28,7 +28,7 @@ def compile(args):
         if args.system:
             CMAKE.append("-DCMAKE_INSTALL_PREFIX=" + args.install_dir)
         CMAKE.append("..")
-        base.shell_exec(CMAKE)
+        base.shell_exec(*CMAKE)
 
         MAKE = []
         if args.system:
@@ -36,26 +36,18 @@ def compile(args):
         MAKE.extend(["make", "-j${nproc}"])
         if args.system:
             MAKE.append("install")
-        base.shell_exec(MAKE)
+        base.shell_exec(*MAKE)
 
 N2N_CONF_DIR = "n2n/etc"
 
 def install_conf(args):
-    CP = ["sudo cp -r", N2N_CONF_DIR, "/"]
-    base.shell_exec(CP)
-
-    RELOAD = ["sudo systemctl daemon-reload"]
-    base.shell_exec(RELOAD)
-
-    UPDATE = ["sudo update-rc.d n2n defaults"]
-    base.shell_exec(update)
+    base.shell_exec("sudo cp -r ", N2N_CONF_DIR, "/")
+    base.shell_exec("sudo systemctl daemon-reload")
+    base.shell_exec("sudo update-rc.d n2n defaults")
 
 def remove_conf(args):
-    RELOAD = ["sudo systemctl stop n2n"]
-    base.shell_exec(RELOAD)
-
-    RM = ["sudo rm -rf /etc/init.d/n2n"]
-    base.shell_exec(RM)
+    base.shell_exec("sudo systemctl stop n2n")
+    base.shell_exec("sudo rm -rf /etc/init.d/n2n")
 
 @cmd.module("n2n.install", refs=["n2n.common"], as_main=True,
             help="n2n install sub command")

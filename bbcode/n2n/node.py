@@ -18,8 +18,7 @@ from .base import *
             help="n2n node common")
 def common_opt(args, bin_path):
     if args.usage:
-        USAGE = [bin_path, "--help"]
-        base.shell_exec(USAGE)
+        base.shell_exec(bin_path, "--help")
         os.sys.exit()
 
     RUN = ["sudo", bin_path, "-f"]
@@ -46,7 +45,7 @@ def super(args):
 
     RUN = common_opt(args, bin_path)
     RUN.extend(["-a", args.ip_pools])
-    base.shell_exec(RUN)
+    base.shell_exec(*RUN)
 
 @cmd.option("--super-url", metavar="URL",
             default="101.200.44.74:7654",
@@ -70,5 +69,5 @@ def edge(args):
     RUN.extend(["-a", args.ip, "-c", args.community,
                 "-l", args.super_url,
                 "-k", args.key])
-    base.shell_exec(RUN)
+    base.shell_exec(*RUN)
 

@@ -355,6 +355,15 @@ class CmdStorage:
                     entry : ModEntry,
                     pre_func):
         logger = logging.getLogger("cmd.parser")
+
+        has_main_entry = not entry.func.empty()
+        for group in entry.groups.values():
+            if not group.func.empty():
+                has_main_entry = True
+        # There is no need to create group options and options
+        if not has_main_entry:
+            return
+
         for group in entry.groups.values():
             try:
                 gparser = parser.add_argument_group(

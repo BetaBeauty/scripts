@@ -7,5 +7,4 @@ from bbcode.common import base, cmd
 @cmd.module("n2n.status", as_main=True,
             help="n2n node status command")
 def status(args):
-    COM = ["netcat", "-u", args.ip, args.port]
-    base.shell_exec(COM)
+    base.shell_exec("netcat -u", args.ip, args.port)

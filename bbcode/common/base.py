@@ -1,19 +1,31 @@
 import os
 import logging
+import subprocess
 
 bash_logger = logging.getLogger("bash")
 
 def make_dirs(dir_path):
     os.makedirs(dir_path, exist_ok=True)
 
-def shell_exec(command, check_error=False):
-    str_com = " ".join([str(c) for c in command])
+def shell_exec(*commands, check_error=False):
+    str_com = " ".join([str(c) for c in commands])
     bash_logger.debug(str_com)
     code = os.system(str_com)
     if check_error and (code != 0):
         raise RuntimeError(
             "command execute terminated: {}".format(str_com))
     return code
+
+def sub_command(*commands, check_error=False):
+    split_coms = []
+    for com in commands:
+        split_coms.extend(com.split())
+    proc = subprocess.run(split_coms, shell=True, stdout=subprocess.PIPE)
+    if check_error and proc.returncode != 0:
+        raise RuntimeError(
+            "command execute terminated: {}".format(split_coms))
+    return proc.stdout
+
 
 class DirEntry:
     def __init__(self, target_dir):
