@@ -89,8 +89,8 @@ FATAL = logging.CRITICAL
 
 logging.addLevelName(TRACE, "TRACE")
 logging.addLevelName(DEBUG, "DEBUG")
-logging.addLevelName(INFO,  " INFO")
-logging.addLevelName(WARN,  " WARN")
+logging.addLevelName(INFO,  "INFO")
+logging.addLevelName(WARN,  "WARN")
 logging.addLevelName(ERROR, "ERROR")
 logging.addLevelName(FATAL, "FATAL")
 
@@ -109,7 +109,7 @@ def Init(log_level):
     assert log_level in LOG_LEVELS
     logging.basicConfig(level=log_level)
     formatter = ColorFormatter(
-            fmt="[ %(asctime)s %(name)10s %(levelname)s ] %(message)s",
+            fmt="[ %(asctime)s %(name)10s %(levelname)5s ] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S")
 
     log_filter = FilterList(

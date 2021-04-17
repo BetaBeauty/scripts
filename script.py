@@ -1,6 +1,6 @@
 from bbcode.common import cmd, log, git, thread
 
-from bbcode import n2n, ssh, rsync
+from bbcode import n2n, ssh, rsync, os
 
 @cmd.module("", as_main=True,
             description="""
