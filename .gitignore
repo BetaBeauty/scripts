@@ -1,4 +1,4 @@
-unix/
+build
 
 .git_root/
 *__pycache__*

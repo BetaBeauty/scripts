@@ -1,6 +1,13 @@
-from bbcode.common import cmd, log, git, thread
+import sys
+from os import path
 
+# set up dependencies
+__ROOT__ = path.dirname(path.realpath(__file__))
+sys.path.insert(0, path.join(__ROOT__, "python"))
+
+from bbcode.common import cmd, log, thread
 from bbcode import n2n, ssh, rsync, os
+from bbcode import code
 
 @cmd.module("", as_main=True,
             description="""

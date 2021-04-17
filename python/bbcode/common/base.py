@@ -1,8 +1,12 @@
 import os
+from os import path
 import logging
 import subprocess
 
 bash_logger = logging.getLogger("bash")
+
+BBCODE_ROOT = path.abspath(
+    path.join(__file__, "../../.."))
 
 def make_dirs(dir_path):
     os.makedirs(dir_path, exist_ok=True)
@@ -49,3 +53,4 @@ def singleton(cls):
 def validate(cond, msg):
     if not cond:
         raise RuntimeError(msg)
+
