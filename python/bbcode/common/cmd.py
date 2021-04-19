@@ -649,6 +649,11 @@ def prepare(refs=[]):
     >>> old_args = args
 
 """
+def arg_store(args, **kw):
+    new_args = copy.deepcopy(args)
+    for k, v in kw.items():
+        setattr(new_args, k, v)
+    return new_args
 
 def Run():
     root_parser = CmdStorage.init_parsers()
