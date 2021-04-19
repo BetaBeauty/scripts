@@ -3,6 +3,32 @@ from typing import List
 
 import logging
 
+TRACE = logging.DEBUG // 2
+DEBUG = logging.DEBUG
+INFO = logging.INFO
+WARN = logging.WARNING
+ERROR = logging.ERROR
+FATAL = logging.CRITICAL
+
+logging.addLevelName(TRACE, "TRACE")
+logging.addLevelName(DEBUG, "DEBUG")
+logging.addLevelName(INFO,  "INFO")
+logging.addLevelName(WARN,  "WARN")
+logging.addLevelName(ERROR, "ERROR")
+logging.addLevelName(FATAL, "FATAL")
+
+LOG_LEVELS = [TRACE, DEBUG, INFO, WARN, ERROR, FATAL]
+LOG_NAMES = [logging.getLevelName(l).strip() for l in LOG_LEVELS]
+
+def level2name(log_level):
+    assert log_level in LOG_LEVELS
+    return LOG_NAMES[LOG_LEVELS.index(log_level)]
+
+def name2level(log_name):
+    assert log_name in LOG_NAMES
+    return LOG_LEVELS[LOG_NAMES.index(log_name)]
+
+
 class ColorFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None, style='%'):
         super(ColorFormatter, self).__init__(fmt, datefmt, style)
@@ -10,8 +36,8 @@ class ColorFormatter(logging.Formatter):
         self._colors = {
             "TRACE": "\033[38;5;111m",
             "DEBUG": "\033[38;5;111m",
-            " INFO": "\033[38;5;47m",
-            " WARN": "\033[38;5;178m",
+            "INFO": "\033[38;5;47m",
+            "WARN": "\033[38;5;178m",
             "ERROR": "\033[38;5;196m",
             "FATAL": "\033[30;48;5;196m",
         }
@@ -79,31 +105,6 @@ class FilterList(logging.Filter):
                         return True
                 return rv
         return rv
-
-TRACE = logging.DEBUG // 2
-DEBUG = logging.DEBUG
-INFO = logging.INFO
-WARN = logging.WARNING
-ERROR = logging.ERROR
-FATAL = logging.CRITICAL
-
-logging.addLevelName(TRACE, "TRACE")
-logging.addLevelName(DEBUG, "DEBUG")
-logging.addLevelName(INFO,  "INFO")
-logging.addLevelName(WARN,  "WARN")
-logging.addLevelName(ERROR, "ERROR")
-logging.addLevelName(FATAL, "FATAL")
-
-LOG_LEVELS = [TRACE, DEBUG, INFO, WARN, ERROR, FATAL]
-LOG_NAMES = [logging.getLevelName(l).strip() for l in LOG_LEVELS]
-
-def level2name(log_level):
-    assert log_level in LOG_LEVELS
-    return LOG_NAMES[LOG_LEVELS.index(log_level)]
-
-def name2level(log_name):
-    assert log_name in LOG_NAMES
-    return LOG_LEVELS[LOG_NAMES.index(log_name)]
 
 def Init(log_level):
     assert log_level in LOG_LEVELS
