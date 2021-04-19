@@ -28,29 +28,59 @@ __REGISTER_SERVICES__ = {}
 logger = logging.getLogger("service")
 
 class ThreadFunc:
-    def __init__(self, func):
-        self._func = as_thread_func(func)
+    def __init__(self, name, serve=False, timeout=5):
+        self._name = name
+        self._serve = serve
+        self._time_out = timeout
+        self._func = None
         self._stop = None
+
+    def register_func(self, func):
+        def _func(*args, **kw):
+            status = func(*args, **kw)
+            status = True if status is None else bool(status)
+            while self._serve and (not status):
+                logger.warning(" ".join([
+                    "service {} stopped for unknown error,".format(
+                        self._name),
+                    "restart in {} seconds".format(self._time_out)
+                ]))
+                wait_or_exit(self._time_out)
+                status = func(*args, **kw)
+        self._func = as_thread_func(_func)
 
     def register_stop_func(self, func):
         self._stop = func
 
     def start(self, *args, **kw):
+        if self._func is None:
+            return
         return self._func(*args, **kw)
 
     def stop(self):
         if self._stop is not None:
             self._stop()
 
-def register_service(name):
+""" Server Function
+
+    Returns
+    =======
+    status: bool
+"""
+
+def register_service(name, **kw):
     def _func(func):
-        __REGISTER_SERVICES__[name] = ThreadFunc(func)
+        tfunc = ThreadFunc(name, **kw)
+        if name in __REGISTER_SERVICES__:
+            raise RuntimeError("duplicated service function")
+        __REGISTER_SERVICES__[name] = tfunc
+        tfunc.register_func(func)
         return func
     return _func
 
 def register_stop_handler(name):
     if name not in __REGISTER_SERVICES__:
-        raise RuntimeError("inliva service name:" + name)
+        raise RuntimeError("invalid service name: {}".format(name))
 
     def _func(func):
         __REGISTER_SERVICES__[name].register_stop_func(func)

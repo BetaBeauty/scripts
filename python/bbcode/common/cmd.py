@@ -642,13 +642,21 @@ def group(mod_name,
 def prepare(refs=[]):
     return module(CmdStorage.GLOBAL_NAME, refs=refs, as_main=True)
 
+""" TODO: add args store function with interface:
+
+    >>> with arg_store(args):
+    >>>     args.name = new_name
+    >>> old_args = args
+
+"""
+
 def Run():
     root_parser = CmdStorage.init_parsers()
     args = root_parser.parse_args()
 
     if getattr(args, "func", None):
         args.func(args)
-        return
+        return args
 
     raise RuntimeError(
         "cannot find the mainly function to run, " +

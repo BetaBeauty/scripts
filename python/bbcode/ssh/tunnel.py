@@ -17,6 +17,9 @@ logger = logging.getLogger("ssh.proxy")
 
 SSH_PKEY_FILE = path.join(DEFAULT_SSH_DIRECTORY, "id_rsa")
 
+@cmd.option("--interval", type=int,
+            default=10,
+            help="ssh tunnel restart interval for unknown error")
 @cmd.option("--local", required=True,
             action="append", default=[],
             help="local binding[listen] address, host[:port]")
@@ -69,15 +72,38 @@ def tunnel(args):
         tunnel_params["ssh_password"] = getpass.getpass(
             prompt="Please enter password for server:{}".format(server))
 
-    server = sshtunnel.SSHTunnelForwarder(server, **tunnel_params)
+    server = None
+    stop_by_user = False
 
-    @thread.register_service("ssh tunnel")
+    @thread.register_service(
+        "ssh tunnel",
+        serve=True,
+        timeout=args.interval)
     def serve():
-        logger.info("ssh tunnel serving ...")
+        global server
+        global stop_by_user
+
+        logger.info("ssh tunnel started")
+        server = sshtunnel.SSHTunnelForwarder(server, **tunnel_params)
         server.start()
-        while True:
-            thread.wait_or_exit(10)
+        while server.is_active:
+            thread.wait_or_exit(timeout=10)
+
+        if not stop_by_user:
+            logger.error(" ".join([
+                "tunnel stopped for unexpected error,",
+                "ssh tunnel forwarder may be failed,",
+                "clear tunnel and restart ..."
+            ]))
+            server.close()
+            # return failed code to indicate restart
+            return False
+        return True
 
     @thread.register_stop_handler("ssh tunnel")
     def stop():
+        global stop_by_user
+        stop_by_user = True
+
+        global server
         server.close()

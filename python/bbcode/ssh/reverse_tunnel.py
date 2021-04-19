@@ -69,13 +69,13 @@ def handler(chan, local_address, info):
     try:
         sock.connect(local_address)
     except Exception as e:
-        logger.error("Forwarding request to %s:%d failed - %r" % (
+        logger.error("connectting to %s:%d failed - %r" % (
             *local_address, e))
         return
 
     __CHANNELS__.append(sock)
 
-    logger.debug("Connected! Reverse Tunnel open %s" % info)
+    logger.debug("connected! reverse tunnel open %s" % info)
 
     while chan.active:
         rqst, _, _ = select.select([chan, sock], [], [], 5)
@@ -113,7 +113,7 @@ def handler(chan, local_address, info):
         sock.close()
     __LOCK__.release()
 
-    logger.debug("Tunnel closed for %s" % info)
+    logger.debug("temporary tunnel closed for %s" % info)
 
 @cmd.group("ssh.tunnel", as_main=True,
            description="""
@@ -131,18 +131,20 @@ def handler(chan, local_address, info):
         local <- 127.0.0.1 <- server <- remote <- user
 """)
 def reverse_tunnel(args):
-    server_ts = ssh_transport(args.server, args.key_file, args.password)
-    if not server_ts:
-        return
-
     los = [parse_url(l, 22) for l in args.local]
     res = [parse_url(r, 22) for r in args.remote]
 
-    for remote_address in res:
-        server_ts.request_port_forward(*remote_address)
+    server_ts = None
 
-    @thread.register_service("ssh.tunnel.reverse")
-    def start_reverse_tunnel():
+    def start_tunnel():
+        global server_ts
+        server_ts = ssh_transport(args.server, args.key_file, args.password)
+        if not server_ts:
+            return
+
+        for remote_address in res:
+            server_ts.request_port_forward(*remote_address)
+
         while server_ts.active:
             server_chan = server_ts.accept(timeout=10)
             if server_chan is None:
@@ -155,8 +157,11 @@ def reverse_tunnel(args):
                 thread.as_thread_func(handler)(
                     server_chan, local_addr, info)
 
-    @thread.register_stop_handler("ssh.tunnel.reverse")
-    def stop_tunnel_reverse():
+    def stop_tunnel():
+        global server_ts
+        if not server_ts:
+            return
+
         for remote_address in res:
             server_ts.cancel_port_forward(*remote_address)
 
@@ -172,3 +177,32 @@ def reverse_tunnel(args):
         for channel in chan_to_rm:
             channel.close()
 
+    stop_by_user = False
+
+    @thread.register_service(
+        "ssh.tunnel.reverse",
+        serve=True,
+        timeout=args.interval)
+    def start_tunnel_service():
+        logger.info("ssh reverse tunnel started")
+        start_tunnel()
+
+        global stop_by_user
+        if not stop_by_user:
+            logger.error(" ".join([
+                "reverse tunnel stopped for unexpected error,",
+                "ssh transport may be failed,",
+                "clear tunnel and restart ..."
+            ]))
+            # for unexpected error, stop tunnel and restart
+            stop_tunnel()
+            # return failed code to indicate restart
+            return False
+        return True
+
+    @thread.register_stop_handler("ssh.tunnel.reverse")
+    def stop_tunnel_servive():
+        global stop_by_user
+        stop_by_user = True
+
+        stop_tunnel()
