@@ -18,7 +18,7 @@ import threading
 
 import paramiko
 
-from bbcode.common import types
+from bbcode.common import base, types
 from bbcode.common import cmd, log, thread
 
 from .config import ssh_config
@@ -42,11 +42,11 @@ def ssh_transport(server, key_file, password):
     client.load_system_host_keys()
     params = { "username": user if user else getpass.getuser(), }
 
-    if path.exists(key_file):
+    if password is not None:
+        params["password"] = password
+    elif path.exists(key_file):
         logger.debug("connecting ssh via private key:{}".format(key_file))
         params["key_filename"] = key_file
-    elif password is not None:
-        params["password"] = password
     else:
         logger.info("private key:{} not exists".format(key_file))
         params["password"] = getpass.getpass(
@@ -59,7 +59,10 @@ def ssh_transport(server, key_file, password):
         raise e
         return None
 
-    return client.get_transport()
+    ts = client.get_transport()
+    ts.set_keepalive(interval=60)
+    ts.use_compression(compress=True)
+    return ts
 
 __CHANNELS__ = []
 __LOCK__ = threading.Lock()
@@ -69,13 +72,15 @@ def handler(chan, local_address, info):
     try:
         sock.connect(local_address)
     except Exception as e:
-        logger.error("connectting to %s:%d failed - %r" % (
+        logger.error("connecting to %s:%d failed - %r" % (
             *local_address, e))
+        chan.close()
         return
 
+    __LOCK__.acquire()
+    __CHANNELS__.append(chan)
     __CHANNELS__.append(sock)
-
-    logger.debug("connected! reverse tunnel open %s" % info)
+    __LOCK__.release()
 
     while chan.active:
         rqst, _, _ = select.select([chan, sock], [], [], 5)
@@ -83,25 +88,13 @@ def handler(chan, local_address, info):
         if chan in rqst:
             data = chan.recv(1024)
             if not data:
-                logger.log(log.TRACE,
-                    "remote {} send empty data".format(info))
                 break
-            logger.log(log.TRACE,
-                "<<< IN {} recv: {} <<<".format(
-                    info, types.bytes2hex(data)))
             sock.sendall(data)
 
         if sock in rqst:
             data = sock.recv(1024)
             if not data:
-                logger.log(
-                    log.TRACE,
-                    "local {} send empty data".format(info))
                 break
-            logger.log(
-                log.TRACE,
-                ">>> OUT {} send: {} >>>".format(
-                    info, types.bytes2hex(data)))
             chan.sendall(data)
 
     __LOCK__.acquire()
@@ -113,7 +106,7 @@ def handler(chan, local_address, info):
         sock.close()
     __LOCK__.release()
 
-    logger.debug("temporary tunnel closed for %s" % info)
+    logger.info("closing reverse tunnel for %s" % info)
 
 @cmd.group("ssh.tunnel", as_main=True,
            description="""
@@ -134,30 +127,37 @@ def reverse_tunnel(args):
     los = [parse_url(l, 22) for l in args.local]
     res = [parse_url(r, 22) for r in args.remote]
 
+    def forward_handler(channel, remote_addr, server_addr):
+        logger.info("connecting reverse tunnel from %s:%d" % (
+            remote_addr[0], remote_addr[1]))
+        for local_addr in los:
+            info = "%s:%s - %s - %s:%d" % (
+                *local_addr, args.server, *remote_addr)
+            thread.as_thread_func(handler)(
+                channel, local_addr, info)
+
     server_ts = None
 
-    def start_tunnel():
+    @thread.register_service(
+        "ssh.tunnel.reverse",
+        auto_reload=True,
+        timeout=args.interval)
+    def start_tunnel_service():
         global server_ts
-        server_ts = ssh_transport(args.server, args.key_file, args.password)
+        logger.info("ssh reverse tunnel started")
+        server_ts = ssh_transport(
+            args.server, args.key_file, args.password)
         if not server_ts:
             return
 
         for remote_address in res:
-            server_ts.request_port_forward(*remote_address)
+            server_ts.request_port_forward(
+                *remote_address, handler=forward_handler)
 
-        while server_ts.active:
-            server_chan = server_ts.accept(timeout=10)
-            if server_chan is None:
-                continue
+        server_ts.accept()
 
-            __CHANNELS__.append(server_chan)
-
-            for local_addr in los:
-                info = "%s:%s - %s" % (*local_addr, args.server)
-                thread.as_thread_func(handler)(
-                    server_chan, local_addr, info)
-
-    def stop_tunnel():
+    @thread.register_stop_handler("ssh.tunnel.reverse")
+    def stop_tunnel_servive():
         global server_ts
         if not server_ts:
             return
@@ -166,7 +166,7 @@ def reverse_tunnel(args):
             server_ts.cancel_port_forward(*remote_address)
 
         server_ts.close()
-        # hook method for quick stop the `server_ts.accept`
+        # hook method for quick stop the `Transport.accept`
         server_ts._queue_incoming_channel(None)
 
         __LOCK__.acquire()
@@ -177,32 +177,4 @@ def reverse_tunnel(args):
         for channel in chan_to_rm:
             channel.close()
 
-    stop_by_user = False
-
-    @thread.register_service(
-        "ssh.tunnel.reverse",
-        serve=True,
-        timeout=args.interval)
-    def start_tunnel_service():
-        logger.info("ssh reverse tunnel started")
-        start_tunnel()
-
-        global stop_by_user
-        if not stop_by_user:
-            logger.error(" ".join([
-                "reverse tunnel stopped for unexpected error,",
-                "ssh transport may be failed,",
-                "clear tunnel and restart ..."
-            ]))
-            # for unexpected error, stop tunnel and restart
-            stop_tunnel()
-            # return failed code to indicate restart
-            return False
-        return True
-
-    @thread.register_stop_handler("ssh.tunnel.reverse")
-    def stop_tunnel_servive():
-        global stop_by_user
-        stop_by_user = True
-
-        stop_tunnel()
+        server_ts = None

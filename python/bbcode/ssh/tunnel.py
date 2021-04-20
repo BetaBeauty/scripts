@@ -72,38 +72,26 @@ def tunnel(args):
         tunnel_params["ssh_password"] = getpass.getpass(
             prompt="Please enter password for server:{}".format(server))
 
-    server = None
+    tunnel = None
     stop_by_user = False
 
     @thread.register_service(
         "ssh tunnel",
-        serve=True,
+        auto_reload=True,
         timeout=args.interval)
     def serve():
-        global server
-        global stop_by_user
+        global tunnel
 
         logger.info("ssh tunnel started")
-        server = sshtunnel.SSHTunnelForwarder(server, **tunnel_params)
-        server.start()
-        while server.is_active:
+        tunnel = sshtunnel.SSHTunnelForwarder(server, **tunnel_params)
+        tunnel.start()
+        while tunnel.is_active:
             thread.wait_or_exit(timeout=10)
-
-        if not stop_by_user:
-            logger.error(" ".join([
-                "tunnel stopped for unexpected error,",
-                "ssh tunnel forwarder may be failed,",
-                "clear tunnel and restart ..."
-            ]))
-            server.close()
-            # return failed code to indicate restart
-            return False
-        return True
 
     @thread.register_stop_handler("ssh tunnel")
     def stop():
-        global stop_by_user
-        stop_by_user = True
-
-        global server
-        server.close()
+        global tunnel
+        if tunnel is None:
+            return
+        tunnel.close()
+        tunnel = None

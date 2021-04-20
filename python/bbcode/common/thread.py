@@ -28,45 +28,55 @@ __REGISTER_SERVICES__ = {}
 logger = logging.getLogger("service")
 
 class ThreadFunc:
-    def __init__(self, name, serve=False, timeout=5):
+    def __init__(self, name, auto_reload=False, timeout=5):
         self._name = name
-        self._serve = serve
+        self._auto_reload = auto_reload
         self._time_out = timeout
         self._func = None
         self._stop = None
 
     def register_func(self, func):
-        def _func(*args, **kw):
-            status = func(*args, **kw)
-            status = True if status is None else bool(status)
-            while self._serve and (not status):
+        def catch_func(*args, **kw):
+            code = False
+            try:
+                code = func(*args, **kw)
+            except Exception as e:
+                logger.error(
+                    "service:{} raise exception: {}".format(
+                        self._name, e))
+            return True if code is None else code
+
+        def wrapper_func(*args, **kw):
+            catch_func(*args, **kw)
+
+            while self._auto_reload:
                 logger.warning(" ".join([
-                    "service {} stopped for unknown error,".format(
+                    "service {} closed,".format(
                         self._name),
                     "restart in {} seconds".format(self._time_out)
                 ]))
+                # clear service context
+                if self._stop is not None:
+                    self._stop()
                 wait_or_exit(self._time_out)
-                status = func(*args, **kw)
-        self._func = as_thread_func(_func)
+
+                catch_func(*args, **kw)
+        self._func = as_thread_func(wrapper_func)
 
     def register_stop_func(self, func):
         self._stop = func
 
-    def start(self, *args, **kw):
+    def serve(self, *args, **kw):
         if self._func is None:
+            raise RuntimeError(
+                "service {} does not have start function".format(self._name))
             return
         return self._func(*args, **kw)
 
-    def stop(self):
+    def close(self):
+        self._auto_reload = False
         if self._stop is not None:
             self._stop()
-
-""" Server Function
-
-    Returns
-    =======
-    status: bool
-"""
 
 def register_service(name, **kw):
     def _func(func):
@@ -79,9 +89,6 @@ def register_service(name, **kw):
     return _func
 
 def register_stop_handler(name):
-    if name not in __REGISTER_SERVICES__:
-        raise RuntimeError("invalid service name: {}".format(name))
-
     def _func(func):
         __REGISTER_SERVICES__[name].register_stop_func(func)
         return func
@@ -96,7 +103,7 @@ def auto_close():
 
         for name, func in __REGISTER_SERVICES__.items():
             logger.info("stop service - {}".format(name))
-            func.stop()
+            func.close()
 
     for sig in ('TERM', 'HUP', 'INT'):
         signal.signal(
@@ -108,4 +115,4 @@ def Run(*args, **kw):
 
     for name, func in __REGISTER_SERVICES__.items():
         logger.info("start service - {}".format(name))
-        func.start(*args, **kw)
+        func.serve(*args, **kw)

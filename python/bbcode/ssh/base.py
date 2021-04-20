@@ -11,4 +11,3 @@ def parse_url(server, default_port):
     args[1] = int(args[1])
     args[0] = args[0].replace("*", "0.0.0.0")
     return args[0], args[1]
-
