@@ -38,6 +38,7 @@ def ssh_transport(server, key_file, password):
                private_key = key_file,
                port = server[1])
 
+    # TODO: replace ssh client with transport directly
     client = paramiko.SSHClient()
     client.load_system_host_keys()
     params = { "username": user if user else getpass.getuser(), }

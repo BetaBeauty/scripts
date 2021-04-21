@@ -28,23 +28,28 @@ __REGISTER_SERVICES__ = {}
 logger = logging.getLogger("service")
 
 class ThreadFunc:
-    def __init__(self, name, auto_reload=False, timeout=5):
+    def __init__(self, name):
         self._name = name
-        self._auto_reload = auto_reload
-        self._time_out = timeout
         self._func = None
         self._stop = None
 
-    def register_func(self, func):
+    def register_func(self, func,
+                      auto_reload=False,
+                      timeout=5):
+        if self._func is not None:
+            raise RuntimeError(
+                "service:{} has been registered".format(self._name))
+
+        self._auto_reload = auto_reload
+        self._time_out = timeout
+
         def catch_func(*args, **kw):
-            code = False
             try:
-                code = func(*args, **kw)
+                func(*args, **kw)
             except Exception as e:
                 logger.error(
                     "service:{} raise exception: {}".format(
                         self._name, e))
-            return True if code is None else code
 
         def wrapper_func(*args, **kw):
             catch_func(*args, **kw)
@@ -69,7 +74,7 @@ class ThreadFunc:
     def serve(self, *args, **kw):
         if self._func is None:
             raise RuntimeError(
-                "service {} does not have start function".format(self._name))
+                "service:{} has not been registered".format(self._name))
             return
         return self._func(*args, **kw)
 
@@ -80,23 +85,21 @@ class ThreadFunc:
 
 def register_service(name, **kw):
     def _func(func):
-        tfunc = ThreadFunc(name, **kw)
-        if name in __REGISTER_SERVICES__:
-            raise RuntimeError("duplicated service function")
-        __REGISTER_SERVICES__[name] = tfunc
-        tfunc.register_func(func)
+        __REGISTER_SERVICES__.setdefault(name, ThreadFunc(name))
+        __REGISTER_SERVICES__[name].register_func(func, **kw)
         return func
     return _func
 
 def register_stop_handler(name):
     def _func(func):
+        __REGISTER_SERVICES__.setdefault(name, ThreadFunc(name))
         __REGISTER_SERVICES__[name].register_stop_func(func)
         return func
     return _func
 
 def auto_close():
     def _shut_down(signo=2, _frame=None):
-        print("\n")
+        print("")
         logger.info("shutting down ...")
         for event in __QUIT_EVENTS__:
             event.set()
