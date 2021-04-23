@@ -73,7 +73,6 @@ def tunnel(args):
             prompt="Please enter password for server:{}".format(server))
 
     tunnel = None
-    stop_by_user = False
 
     @thread.register_service(
         "ssh tunnel",
@@ -82,7 +81,6 @@ def tunnel(args):
     def serve():
         global tunnel
 
-        logger.info("ssh tunnel started")
         tunnel = sshtunnel.SSHTunnelForwarder(server, **tunnel_params)
         tunnel.start()
         while tunnel.is_active:

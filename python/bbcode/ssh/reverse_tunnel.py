@@ -145,7 +145,6 @@ def reverse_tunnel(args):
         timeout=args.interval)
     def start_tunnel_service():
         global server_ts
-        logger.info("ssh reverse tunnel started")
         server_ts = ssh_transport(
             args.server, args.key_file, args.password)
         if not server_ts:
