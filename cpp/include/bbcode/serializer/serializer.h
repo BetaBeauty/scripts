@@ -17,15 +17,20 @@ std::string serialize(T *t) {
 
 template<template<typename, int> class H, typename T>
 class Formater {
+public:
   T const& data_;
   std::shared_ptr<BaseStream> os_;
   H<T, TYPE_VALUE(T)> handler_;
 
 public:
-  Formater(T const& data)
+  explicit Formater(T const& data)
     : data_(data),
       handler_(H<T, TYPE_VALUE(T)>())
-  {}
+  {
+    std::cout << "formater init: " << TYPE_STR(T) << std::endl;
+    // std::cout << "formater init: " << static_cast<void*>(data) << std::endl;
+    std::cout << "formater init: " << data << " " << data_ << std::endl;
+  }
 
   template<typename S,
            typename std::enable_if<ConvertFromTo<S, BaseStream>
@@ -45,6 +50,7 @@ public:
   H<T, TYPE_VALUE(T)>& handler() { return handler_; }
 
   void Write() {
+    std::cout << "formater: " << data_ << std::endl;
     if (os_ == nullptr) os_ = std::make_shared<IOStream>();
     handler_.Write(*os_, data_);
   }
@@ -67,6 +73,9 @@ public:
   template<
     template<typename, int> class H = Handler, typename T>
   static Formater<H, T> generate(T const& a) {
+    std::cout << "generate: "
+      << TYPE_STR(T) << " "
+      << a << " " << &a << std::endl;
     return Formater<H, T>(a);
   }
 };

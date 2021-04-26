@@ -113,11 +113,11 @@ def handler(chan, local_address, info):
            description="""
   Reverse tunnel Group
 
-  User may want to export some local
-    address's ports into global internet in some specific
-    scenarios, like do reverse tunnel port mapping so that
-    developers can access company machines at home as an VPN
-    does, but this is somehow a light solution for programmers:
+  User may want to export some local address's ports into
+    global internet in some specific scenarios, like do
+    reverse tunnel port mapping so that developers can access
+    company machines at home as an VPN does, but this is
+    somehow a light solution for programmers:
 
     port forwarding map:
         local(listen) -> 127.0.0.1 -> server -> remote(bind)

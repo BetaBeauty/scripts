@@ -45,6 +45,14 @@ namespace bbcode {
 
 namespace details {
 
+/*!
+ * Template Class for Specialization TypeHandler
+ *
+ * This derived design is neccessary for typed-data handler
+ *  specialization of template, since spec-type handler could
+ *  derive this class and reuse the common option functions
+ *  like `init_option_default`, `option_default`, ...etc.
+ */
 template<int type>
 class _TypeHandler {
 protected:
@@ -55,11 +63,6 @@ protected:
       .register_option("ignore", "");
     return option_default();
   }
-
-  template<typename ...Args>
-  static void register_option(Options &opts, Args && ...args) {
-    opts.register_option(args...);
-  }
   
   Options option_;
 
@@ -69,7 +72,7 @@ public:
   // virtual void list_options() = 0;
   inline Options& option() { return option_; }
   static Options& option_default() { 
-    static Options opts_def;
+    static thread_local Options opts_def;
     return opts_def;
   }
 };
@@ -132,6 +135,9 @@ public:
   static void config_option_default() {
     init_option_default()
       .register_option("inner_split", ",")
+      .register_option("max_prefix_number", 5)
+      .register_option("max_suffix_number", 1)
+      .register_option("skip_notation", "...")
       .config_option("prefix", "[")
       .config_option("suffix", "]");
   }
@@ -155,10 +161,25 @@ public:
 
   virtual void Write(BaseStream &os, T const& data) {
     os.Write(option_.option<std::string>("prefix"));
-    for (auto &&it = data.begin(); it != data.end(); ++it) {
-      if (it != data.begin())
+    // option_.config_option("max_prefix_number", 1);
+    // option_.config_option("max_suffix_number", 1);
+    int skip_begin = option_.option<int>("max_prefix_number");
+    int snum = option_.option<int>("max_suffix_number");
+    int skip_end = int(data.size()) - snum;
+    std::string skip_str = option_.option<std::string>("skip_notation");
+    int cc = 0;
+    bool is_skip = (skip_begin < skip_end);
+    for (auto &&it = data.begin(); it != data.end(); ++it, ++cc) {
+      if ((skip_begin < cc) && (cc < skip_end))
+        continue;
+
+      if (cc != 0)
         os.Write(option_.option<std::string>("inner_split"));
-      recur_handler_.Write(os, *it);
+
+      if (is_skip && (cc == skip_begin))
+        os.Write(skip_str);
+      else
+        recur_handler_.Write(os, *it);
     }
     os.Write(option_.option<std::string>("suffix"));
   }

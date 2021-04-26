@@ -34,24 +34,42 @@ int main() {
     "hello", "world", "to", "me"
   };
 
-  Serializer::generate<Handler>(&a)
-    .compose(IOStream())
-    .Writeln();
+  // Serializer::generate<Handler>(&a)
+  //   .compose(IOStream())
+  //   .Writeln();
 
-  Serializer::generate(nullptr)
-    .Writeln();
+  // Serializer::generate(nullptr)
+  //   .Writeln();
 
 
   std::vector<std::pair<std::string, std::vector<int>>> c{
     {"one", {1,2,3,}},
     {"two", {4,5,6,}},
-    {"three", {7,8,9,}}
+    // {"three", {7,8,9,}},
+    // {"four", {7,8,9,}},
+    {"five", {7,8,9,}}
   };
+  std::cout << "c size: " << (int(c.size()) - int(5)) << std::endl;;
   auto &&test = Serializer::generate(&c);
   test.handler().option()
     .print()
     .config_option("p_middle", "> &{\n  ")
     .config_option("p_suffix", "\n}");
+
+  int cc = 0;
+  std::cout << (cc++) << ":" << &c << " " << test.data_ << std::endl;
+
+  auto &arr_handler = test.handler().sub_handler();
+  auto &opt = arr_handler.option();
+  std::cout << (cc++) << ":" << &c << " " << test.data_ << std::endl;
+  opt.config_option("inner_split", ", ");
+  std::cout << (cc++) << ":" << &c << " " << test.data_ << std::endl;
+  // opt.opts["max_prefix_number"] = 1;
+  int val = 1;
+  opt.config_option("max_prefix_number", val, &c);
+  // opt.config_option("max_prefix_number", val, test.data_);
+  std::cout << (cc++) << ":" << &c << " " << test.data_ << std::endl;
+  // opt.config_option("max_suffix_number", 1);
   test.handler()
     .sub_handler()
     .sub_handler()
@@ -70,16 +88,16 @@ int main() {
   test.Writeln();
 
 
-  Formater<Handler, decltype(a)> formater(a);
-  formater.handler().sub_handler().sub_handler<1>()
-    .option()
-    .config_option("prefix", "Int(")
-    .config_option("suffix", ")");
-  // writer.compose(std::cout).Write();
-  formater.compose(IOStream());
-  IOStream stream;
-  formater.compose(stream);
-  formater.Writeln();
+  // Formater<Handler, decltype(a)> formater(a);
+  // formater.handler().sub_handler().sub_handler<1>()
+  //   .option()
+  //   .config_option("prefix", "Int(")
+  //   .config_option("suffix", ")");
+  // // writer.compose(std::cout).Write();
+  // formater.compose(IOStream());
+  // IOStream stream;
+  // formater.compose(stream);
+  // formater.Writeln();
 
   return 0;
 }
