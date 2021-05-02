@@ -8,7 +8,7 @@ import socketserver
 import paramiko
 import sshtunnel
 
-from bbcode.common import cmd, url, thread, log
+from bbcode.common import cmd, thread, log
 
 from . import key
 from .base import *
